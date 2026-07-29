@@ -1,0 +1,10 @@
+# private reference material, never publish
+do_not_push_ref/
+
+node_modules/
+dist/
+release/
+*.log
+.DS_Store
+Thumbs.db
+config.json

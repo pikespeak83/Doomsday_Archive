@@ -1,0 +1,76 @@
+{
+  "name": "doomsday-archive",
+  "version": "1.0.0",
+  "description": "Doomsday Archive: an offline, LAN-only file archive terminal styled as a government containment OS",
+  "author": "pikespeak83",
+  "license": "MIT",
+  "productName": "Doomsday Archive",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on tcp:5178 && electron .\"",
+    "build:web": "vite build",
+    "icons:win": "node scripts/build-app-icon.js && node scripts/build-win-icon.js",
+    "start": "electron .",
+    "dist": "npm run icons:win && npm run build:web && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.0",
+    "concurrently": "^9.2.1",
+    "electron": "^37.2.4",
+    "electron-builder": "^26.0.12",
+    "sharp": "^0.34.5",
+    "to-ico": "^1.1.5",
+    "vite": "^7.1.7",
+    "wait-on": "^9.0.1"
+  },
+  "build": {
+    "appId": "com.pikespeak83.doomsdayarchive",
+    "productName": "Doomsday Archive",
+    "asar": true,
+    "compression": "maximum",
+    "files": [
+      "electron/**/*",
+      "backend/**/*",
+      "dist/**/*",
+      "package.json",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "assets/app-icon.ico",
+        "to": "app-icon.ico"
+      }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": ["nsis"],
+      "icon": "assets/app-icon.ico",
+      "verifyUpdateCodeSignature": false,
+      "signAndEditExecutable": false,
+      "artifactName": "Doomsday-Archive-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "warningsAsErrors": false,
+      "license": "license-agreement.html",
+      "installerIcon": "assets/app-icon.ico",
+      "uninstallerIcon": "assets/app-icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Doomsday Archive",
+      "runAfterFinish": true,
+      "uninstallDisplayName": "${productName} ${version}",
+      "displayLanguageSelector": false,
+      "artifactName": "Doomsday-Archive-Setup-${version}.${ext}"
+    }
+  }
+}
