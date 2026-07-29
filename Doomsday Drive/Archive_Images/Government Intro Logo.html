@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Government Portal Login</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background: #556B2F; /* OD Green */
+            background-image: url('fsdf.gif'); /* Add a background */
+            background-size: 100% 100%; /* Fit window size */
+            background-repeat: no-repeat;
+            color: #FFF;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            width: 100vw;
+            overflow-y: au; /* Make page scrollable */
+        }
+
+        .container {
+            text-align: center;
+            background: rgba(0, 0, 0, 0.6); /* Subtle translucent black background */
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            width: 90%; /* Make container 10% smaller */
+            max-width: 600px;
+            margin: 50px auto; /* Add margin to allow scrolling */
+        }
+
+        .logo {
+            width: 100%;
+            height: auto;
+            max-width: 150px; /* Reduced size by 50% */
+            margin-top: 50px;
+            margin-bottom: 20px;
+        }
+
+        .title {
+            font-size: 2.5rem;
+            color: #32CD32; /* Bright Green */
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5); /* Subtle text shadow */
+        }
+
+        .subtitle {
+            font-size: 1.5rem;
+            color: #FFA500; /* Orange */
+            margin-bottom: 2rem;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5); /* Subtle text shadow */
+        }
+
+        .form {
+            margin-top: 20px;
+        }
+
+        .form input {
+            display: block;
+            width: 80%;
+            margin: 10px auto;
+            padding: 10px;
+            font-size: 1rem;
+            border: 1px solid #CCC;
+            border-radius: 5px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        .form button {
+            background-color: #32CD32; /* Bright Green */
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.3s;
+        }
+
+        .form button:hover {
+            background-color: #228B22; /* Darker Green */
+        }
+
+        .footer {
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="Division_Logo_2.png" alt="Government Logo" class="logo"> <!-- Replaced with Division_Logo_2.png -->
+        <div class="title">Doomsday Archive Portal</div>
+        <div class="subtitle">KEEPING A FLAME THROUGH THE DARKNESS</div>
+
+        <form class="form" onsubmit="return validateCredentials()">
+            <input type="text" id="username" placeholder="Username" required>
+            <input type="password" id="password" placeholder="Password" required>
+            <button type="submit">Login</button>
+        </form>
+
+        <div class="footer">Secure Access Only</div>
+    </div>
+
+    <script>
+        function validateCredentials() {
+            const validUsername = "cerberus"; // Replace with actual logic or API call
+            const validPassword = "0883"; // Replace with actual logic or API call
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (username === validUsername && password === validPassword) {
+                alert('Login successful!');
+                window.location.href = "next-page.html"; // Replace with your target URL
+            } else {
+                alert('Invalid username or password.');
+            }
+
+            return false; // Prevent default form submission
+        }
+    </script>
+</body>
+</html>
