@@ -5,6 +5,8 @@ node_modules/
 dist/
 release/
 *.log
+dist_log.txt
+build_check.txt
 .DS_Store
 Thumbs.db
 config.json

@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const { createJsonStore } = require("../backend/configStore");
 const { discoverHosts } = require("../backend/discovery");
+const { createUpdater } = require("../backend/updater");
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -182,6 +183,12 @@ ipcMain.handle("window:close", () => mainWindow?.close());
 
 app.whenReady().then(() => {
   createMainWindow();
+  const updater = createUpdater({
+    assetPrefix: "Doomsday-Field-Terminal-Setup",
+    currentVersion: appVersion,
+    onEvent: (event) => sendToRenderer("field:update", event)
+  });
+  void updater.checkOnLaunch(mainWindow);
 });
 
 app.on("second-instance", () => {

@@ -6,6 +6,7 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { readConfig, writeConfig } = require("../backend/configStore");
 const { createLanServer } = require("../backend/lanServer");
 const { createResponder } = require("../backend/discovery");
+const { createUpdater } = require("../backend/updater");
 const { listVirtual, resolveVirtual, sourceStats } = require("../backend/archiveStore");
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -306,6 +307,12 @@ app.whenReady().then(async () => {
   if (currentConfig.sharingEnabled) {
     await lan.start(currentConfig.port);
   }
+  const updater = createUpdater({
+    assetPrefix: "Doomsday-Archive-Setup",
+    currentVersion: appVersion,
+    onEvent: (event) => sendToRenderer("lan:event", event)
+  });
+  void updater.checkOnLaunch(mainWindow);
 });
 
 app.on("second-instance", () => {

@@ -63,6 +63,13 @@ export default function App() {
         pushToast(`${event.device?.name} retrieved ${event.file}`);
       } else if (event.type === "server-error") {
         pushToast(`UPLINK ERROR: ${event.message}`, true);
+      } else if (event.type === "update-found") {
+        playSound("alert", 0.5);
+        pushToast(`GRID TRANSMISSION: UPDATE ${event.version} DETECTED`);
+      } else if (event.type === "update-downloading") {
+        pushToast(`RETRIEVING UPDATE ${event.version} FROM THE GRID...`);
+      } else if (event.type === "update-ready") {
+        pushToast(`UPDATE ${event.version} RETRIEVED. RESTARTING NODE...`);
       }
     });
     return () => {

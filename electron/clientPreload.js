@@ -18,5 +18,11 @@ contextBridge.exposeInMainWorld("fieldApi", {
     const listener = (_event, payload) => handler(payload);
     ipcRenderer.on("field:download", listener);
     return () => ipcRenderer.removeListener("field:download", listener);
+  },
+  onUpdateEvent: (handler) => {
+    if (typeof handler !== "function") return () => {};
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on("field:update", listener);
+    return () => ipcRenderer.removeListener("field:update", listener);
   }
 });

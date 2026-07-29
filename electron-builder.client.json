@@ -1,6 +1,8 @@
 {
   "appId": "com.pikespeak83.doomsdayfield",
   "productName": "Doomsday Field Terminal",
+  "electronDist": "node_modules/electron/dist",
+  "afterPack": "./scripts/after-pack-rcedit.js",
   "extraMetadata": {
     "main": "electron/clientMain.js"
   },
