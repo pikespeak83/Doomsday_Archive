@@ -4,9 +4,11 @@ import TopBar from "../components/TopBar.jsx";
 import Seal from "../components/Seal.jsx";
 import FolderIcon from "../components/FolderIcon.jsx";
 import WindowFrame from "../components/WindowFrame.jsx";
-import ClickSpark from "../reactbits/ClickSpark.jsx";
-import LetterGlitch from "../reactbits/LetterGlitch.jsx";
+import FaultyTerminal from "../reactbits/FaultyTerminal.jsx";
 import DecryptedText from "../reactbits/DecryptedText.jsx";
+import TextType from "../reactbits/TextType.jsx";
+import ASCIIText from "../reactbits/ASCIIText.jsx";
+import LineSidebar from "../reactbits/LineSidebar.jsx";
 import RemoteArchiveApp from "./apps/RemoteArchiveApp.jsx";
 import FieldUplinkApp from "./apps/FieldUplinkApp.jsx";
 import FieldSettingsApp from "./apps/FieldSettingsApp.jsx";
@@ -46,6 +48,7 @@ export default function FieldApp() {
   const [connection, setConnection] = useState(null); // { address, port, hostName }
   const [openApps, setOpenApps] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const [shuttingDown, setShuttingDown] = useState(false);
   const pollRef = useRef(null);
 
   useEffect(() => {
@@ -192,6 +195,13 @@ export default function FieldApp() {
     setOpenApps((prev) => prev.filter((a) => a !== id));
   }
 
+  function shutdown() {
+    if (shuttingDown) return;
+    setShuttingDown(true);
+    playSound("close", 0.5);
+    setTimeout(() => window.fieldApi.close(), 780);
+  }
+
   if (!config || !sysInfo) {
     return <div className="os-root crt" />;
   }
@@ -202,8 +212,8 @@ export default function FieldApp() {
   ];
 
   return (
-    <div className="os-root crt">
-      <ClickSpark sparkColor="#b6ff6a">
+    <>
+    <div className={`os-root crt ${shuttingDown ? "powering-off" : ""}`}>
       {phase === "boot" && (
         <BootScreen
           hostname={sysInfo.hostname}
@@ -213,13 +223,25 @@ export default function FieldApp() {
         />
       )}
 
-      <TopBar stats={stats} />
+      <TopBar title="DOOMSDAY FIELD TERMINAL" stats={stats} onShutdown={shutdown} />
 
       {(phase === "connect" || phase === "pending" || phase === "denied") && (
         <div className="desktop">
-          <LetterGlitch glitchSpeed={80} opacity={0.12} outerVignette />
+          <div className="connect-shader">
+            <FaultyTerminal tint="#7dff3f" brightness={0.7} mouseReact={false} timeScale={0.3} />
+          </div>
           <div className="connect-wrap">
-            <Seal className="connect-seal" />
+            <div className="connect-ascii">
+              <ASCIIText
+                text={phase === "denied" ? "DENIED" : "D.C.I."}
+                asciiFontSize={7}
+                planeBaseHeight={7}
+                enableWaves
+                gradient={phase === "denied"
+                  ? "radial-gradient(circle, #ff8a76 0%, #ff5f4f 55%, #7a1608 100%)"
+                  : "radial-gradient(circle, #b6ff6a 0%, #7dff3f 50%, #3f8a1f 100%)"}
+              />
+            </div>
             <div className="panel connect-panel">
               {phase === "connect" && (
                 <>
@@ -291,7 +313,17 @@ export default function FieldApp() {
                     <DecryptedText text="TRANSMISSION RECEIVED BY HOST NODE" speed={26} />
                   </div>
                   <div className="status-line">
-                    AWAITING HOST APPROVAL<span className="cursor-block" />
+                    <TextType
+                      text={[
+                        "AWAITING HOST APPROVAL...",
+                        "TRANSMISSION HELD IN QUEUE...",
+                        "STAND BY, OPERATIVE..."
+                      ]}
+                      typingSpeed={42}
+                      deletingSpeed={18}
+                      pauseDuration={1600}
+                      cursorCharacter="_"
+                    />
                   </div>
                   <p className="dim" style={{ fontSize: 13, marginTop: 10 }}>
                     The host must grant this device clearance in DEVICES on the
@@ -318,9 +350,22 @@ export default function FieldApp() {
 
       {phase === "desktop" && connection && (
         <div className="desktop">
+          <div className="desktop-shader">
+            <FaultyTerminal tint="#7dff3f" brightness={0.55} mouseReact={false} timeScale={0.22} />
+          </div>
           <div className="map-grid" />
           <div className="world-map" />
           <Seal className="desktop-seal" />
+
+          <LineSidebar
+            title="DCI"
+            items={APPS.map((app) => ({
+              id: app.id,
+              label: app.label,
+              active: openApps.includes(app.id)
+            }))}
+            onSelect={openApp}
+          />
 
           <div className="icon-column">
             {APPS.map((app) => (
@@ -365,8 +410,9 @@ export default function FieldApp() {
           </div>
         ))}
       </div>
-      </ClickSpark>
     </div>
+    {shuttingDown && <div className="crt-off-line" />}
+    </>
   );
 
   function connectManual() {

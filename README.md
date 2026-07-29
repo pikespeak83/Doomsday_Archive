@@ -20,8 +20,9 @@ No internet. No accounts. No cloud. Ever.
 
 - Government terminal aesthetic: green phosphor CRT, world map, DCI seal
 - ReactBits components (vendored offline): DecryptedText, LetterGlitch,
-  ClickSpark
-- Boot sequence with "WELCOME BACK, <PC NAME>" decryption animation, no login
+  TextType, FaultyTerminal, ASCIIText, LineSidebar
+- Boot sequence with "WELCOME BACK, <PC NAME>" decryption animation, no login,
+  and a CRT power-off animation on close
 - Full-drive vault: link any number of whole drives or folders
 - Zero-config discovery: field terminals find the host over UDP broadcast
 - Host approval flow: every device must be granted clearance in DEVICES,

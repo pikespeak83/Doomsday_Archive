@@ -16,6 +16,9 @@ All assets ship inside the app so it runs fully offline.
 - Seal, folder icons, and app icon: original SVG artwork made for this project.
 
 ## UI components (src/reactbits)
-- DecryptedText, LetterGlitch, ClickSpark: vendored from reactbits.dev
-  (https://github.com/DavidHDev/react-bits), MIT license, trimmed to run
-  fully offline with no external dependencies.
+- DecryptedText, LetterGlitch, TextType, FaultyTerminal, ASCIIText: vendored
+  from reactbits.dev (https://github.com/DavidHDev/react-bits), MIT license,
+  trimmed to run fully offline (no Google Fonts, no gsap; ogl and three are
+  bundled npm packages).
+- LineSidebar: original implementation in the reactbits.dev style (the
+  upstream component is Pro-only and not redistributable).

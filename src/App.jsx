@@ -10,7 +10,8 @@ import UplinkApp from "./components/apps/UplinkApp.jsx";
 import TerminalApp from "./components/apps/TerminalApp.jsx";
 import SettingsApp from "./components/apps/SettingsApp.jsx";
 import HelpApp from "./components/apps/HelpApp.jsx";
-import ClickSpark from "./reactbits/ClickSpark.jsx";
+import FaultyTerminal from "./reactbits/FaultyTerminal.jsx";
+import LineSidebar from "./reactbits/LineSidebar.jsx";
 import { playSound, setSoundsEnabled } from "./lib/sounds.js";
 
 const APPS = [
@@ -31,6 +32,7 @@ export default function App() {
   const [booted, setBooted] = useState(false);
   const [openApps, setOpenApps] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const [shuttingDown, setShuttingDown] = useState(false);
   const openAppsRef = useRef(openApps);
   openAppsRef.current = openApps;
 
@@ -84,6 +86,13 @@ export default function App() {
     setOpenApps((prev) => prev.filter((a) => a !== id));
   }
 
+  function shutdown() {
+    if (shuttingDown) return;
+    setShuttingDown(true);
+    playSound("close", 0.5);
+    setTimeout(() => window.archiveApi.close(), 780);
+  }
+
   if (!config || !sysInfo) {
     return <div className="os-root crt" />;
   }
@@ -99,16 +108,29 @@ export default function App() {
   ];
 
   return (
-    <div className="os-root crt">
-      <ClickSpark sparkColor="#b6ff6a">
+    <>
+    <div className={`os-root crt ${shuttingDown ? "powering-off" : ""}`}>
       {!booted && (
         <BootScreen hostname={sysInfo.hostname} onDone={() => setBooted(true)} />
       )}
-      <TopBar stats={stats} />
+      <TopBar title="DOOMSDAY ARCHIVE" stats={stats} onShutdown={shutdown} />
       <div className="desktop">
+        <div className="desktop-shader">
+          <FaultyTerminal tint="#7dff3f" brightness={0.55} mouseReact={false} timeScale={0.22} />
+        </div>
         <div className="map-grid" />
         <div className="world-map" />
         <Seal className="desktop-seal" />
+
+        <LineSidebar
+          title="DCI"
+          items={APPS.map((app) => ({
+            id: app.id,
+            label: app.label,
+            active: openApps.includes(app.id)
+          }))}
+          onSelect={openApp}
+        />
 
         <div className="icon-column">
           {APPS.map((app) => (
@@ -154,7 +176,8 @@ export default function App() {
           </div>
         ))}
       </div>
-      </ClickSpark>
     </div>
+    {shuttingDown && <div className="crt-off-line" />}
+    </>
   );
 }

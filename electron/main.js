@@ -78,6 +78,22 @@ function createMainWindow() {
 
   mainWindow.once("ready-to-show", () => mainWindow.show());
 
+  if (!app.isPackaged) {
+    // dev aid: report whether the UI actually rendered (visible in the dev terminal)
+    mainWindow.webContents.on("did-finish-load", () => {
+      setTimeout(async () => {
+        try {
+          const probe = await mainWindow.webContents.executeJavaScript(
+            "(() => ({ topbar: !!document.querySelector('.topbar'), boot: !!document.querySelector('.boot'), icons: document.querySelectorAll('.desk-icon').length, err: window.__lastError || null }))()"
+          );
+          console.log("[ui-probe host]", JSON.stringify(probe));
+        } catch (err) {
+          console.log("[ui-probe host] failed:", String(err.message || err));
+        }
+      }, 2500);
+    });
+  }
+
   if (app.isPackaged) {
     mainWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   } else {
