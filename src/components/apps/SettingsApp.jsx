@@ -162,6 +162,9 @@ export default function SettingsApp({ config, onConfigChange }) {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {[
           ["map", "WORLD MAP"],
+          ["emerald", "EMERALD MAP"],
+          ["ember", "EMBER MAP"],
+          ["crimson", "CRIMSON MAP"],
           ["terminal", "FAULTY TERMINAL"],
           ["glitch", "LETTER GLITCH"],
           ["none", "PLAIN"]
@@ -171,7 +174,8 @@ export default function SettingsApp({ config, onConfigChange }) {
             className={`btn small ${config.desktopBackground === value || (!config.desktopBackground && value === "map") ? "" : "ghost"}`}
             onClick={() => {
               playSound("toggle", 0.4);
-              void save({ desktopBackground: value });
+              const matched = BACKDROP_THEMES[value];
+              void save({ desktopBackground: value, ...(matched ? { theme: matched } : {}) });
             }}
           >
             {label}
@@ -188,6 +192,9 @@ export default function SettingsApp({ config, onConfigChange }) {
           CUSTOM IMAGE...
         </button>
       </div>
+      <p className="dim" style={{ fontSize: 12, marginTop: 6 }}>
+        Picking a bundled map switches the whole interface style to match it.
+      </p>
       {config.desktopBackground === "image" && config.backgroundImage && (
         <p className="dim" style={{ fontSize: 12, marginTop: 6, wordBreak: "break-all" }}>
           {config.backgroundImage}
@@ -200,12 +207,30 @@ export default function SettingsApp({ config, onConfigChange }) {
 
       <hr className="hr" />
       <div className="field-label">STYLES</div>
-      <p className="dim" style={{ fontSize: 13 }}>
-        ALTERNATE TERMINAL STYLES :: <span className="bright">COMING SOON</span>
-      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {[
+          ["green", "PHOSPHOR GREEN"],
+          ["amber", "AMBER ALERT"],
+          ["crimson", "CRIMSON PROTOCOL"]
+        ].map(([value, label]) => (
+          <button
+            key={value}
+            className={`btn small ${(config.theme || "green") === value ? "" : "ghost"}`}
+            onClick={() => {
+              playSound("toggle", 0.4);
+              void save({ theme: value });
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
+
+/** Bundled backdrops force the matching style. */
+const BACKDROP_THEMES = { emerald: "green", ember: "amber", crimson: "crimson" };
 
 function PasswordSection({ config, onConfigChange }) {
   const [current, setCurrent] = useState("");

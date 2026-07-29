@@ -20,6 +20,37 @@
   --font-mono: "Share Tech Mono", monospace;
 }
 
+/* Style variants: the palette follows the selected backdrop. */
+.os-root.theme-amber {
+  --green: #ffab26;
+  --green-bright: #ffd06e;
+  --green-dim: #a3690f;
+  --green-faint: rgba(163, 105, 15, 0.35);
+  --green-dark: #33200a;
+  --bg: #080401;
+  --panel: rgba(26, 14, 2, 0.92);
+  --red: #ff5f4f;
+}
+.os-root.theme-crimson {
+  --green: #ff5240;
+  --green-bright: #ff8f7d;
+  --green-dim: #a52c1e;
+  --green-faint: rgba(165, 44, 30, 0.35);
+  --green-dark: #330a05;
+  --bg: #040910;
+  --panel: rgba(8, 14, 24, 0.92);
+  --red: #ffab26;
+}
+
+/* Cerberus seal image: circular crop of the emblem art. */
+.seal-img {
+  border-radius: 50%;
+  object-fit: cover;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--green-faint);
+  background: #000;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -92,8 +123,12 @@ body {
 .boot-seal {
   width: 240px;
   height: 240px;
-  animation: sealIn 1.6s ease-out both;
+  animation: sealIn 1.6s ease-out both, sealSpin 26s linear 1.6s infinite;
   filter: drop-shadow(0 0 18px rgba(125, 255, 63, 0.35));
+}
+@keyframes sealSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 @keyframes sealIn {
   0% { opacity: 0; transform: scale(0.82) rotate(-8deg); }
@@ -232,7 +267,7 @@ body {
   height: 300px;
   transform: translate(-50%, -50%);
   filter: drop-shadow(0 0 24px rgba(200, 255, 170, 0.28));
-  opacity: 0.92;
+  opacity: 0.5;
   pointer-events: none;
 }
 
@@ -586,6 +621,10 @@ body {
   opacity: 0.5;
   filter: saturate(0.7) brightness(0.75);
   pointer-events: none;
+}
+.desktop-image.bundled {
+  opacity: 0.55;
+  filter: brightness(0.85);
 }
 .btn.ghost { border-color: var(--green-faint); color: var(--green-dim); background: transparent; }
 .btn.ghost:hover { border-color: var(--green); color: var(--green); background: var(--green-dark); }

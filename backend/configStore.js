@@ -65,6 +65,8 @@ const hostDefaults = {
   desktopBackground: "map",
   /** Absolute path of a custom background image (desktopBackground="image"). */
   backgroundImage: "",
+  /** UI style: green, amber, or crimson. Follows bundled map backdrops. */
+  theme: "green",
   /** Devices the host has approved: { id, name, token, approvedAt, lastSeen }. */
   approvedDevices: []
 };

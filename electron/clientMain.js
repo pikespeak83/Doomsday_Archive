@@ -32,7 +32,9 @@ const fieldDefaults = {
   hostPort: 8737,
   token: "",
   uiSoundsEnabled: true,
-  bootAnimationEnabled: true
+  bootAnimationEnabled: true,
+  desktopBackground: "map",
+  theme: "green"
 };
 
 const store = createJsonStore("field-config.json", fieldDefaults);

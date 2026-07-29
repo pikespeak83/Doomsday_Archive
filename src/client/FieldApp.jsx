@@ -16,6 +16,7 @@ import FieldHelpApp from "./apps/FieldHelpApp.jsx";
 import FieldLiveFeed from "./FieldLiveFeed.jsx";
 import MediaViewer from "../components/MediaViewer.jsx";
 import TaskBar from "../components/TaskBar.jsx";
+import { THEME_FX, BUNDLED_BACKDROPS } from "../lib/themes.js";
 import { playSound, setSoundsEnabled } from "../lib/sounds.js";
 import { baseUrl, listFiles, requestAccess, accessState, hostInfo, broadcastState, downloadUrl } from "./api.js";
 
@@ -341,9 +342,15 @@ export default function FieldApp() {
     { label: "MODE:FIELD", on: true }
   ];
 
+  const theme = config.theme || "green";
+  const fx = THEME_FX[theme] || THEME_FX.green;
+  const themeClass = theme === "green" ? "" : `theme-${theme}`;
+  const backdrop = config.desktopBackground || "map";
+  const bundledBackdrop = BUNDLED_BACKDROPS[backdrop];
+
   return (
     <>
-    <div className={`os-root crt ${shuttingDown ? "powering-off" : ""}`}>
+    <div className={`os-root crt ${themeClass} ${shuttingDown ? "powering-off" : ""}`}>
       {phase === "boot" && (
         <BootScreen
           hostname={sysInfo.hostname}
@@ -492,11 +499,23 @@ export default function FieldApp() {
 
       {phase === "desktop" && connection && (
         <div className="desktop">
-          <div className="desktop-shader">
-            <FaultyTerminal tint="#7dff3f" brightness={0.55} mouseReact={false} timeScale={0.22} />
-          </div>
-          <div className="map-grid" />
-          <div className="world-map" />
+          {backdrop !== "none" && !bundledBackdrop && (
+            <div className="desktop-shader">
+              <FaultyTerminal tint={fx.tint} brightness={0.55} mouseReact={false} timeScale={0.22} />
+            </div>
+          )}
+          {bundledBackdrop && (
+            <div
+              className="desktop-image bundled"
+              style={{ backgroundImage: `url('${bundledBackdrop.image}')` }}
+            />
+          )}
+          {backdrop === "map" && (
+            <>
+              <div className="map-grid" />
+              <div className="world-map" />
+            </>
+          )}
           <Seal className="desktop-seal" />
 
           <LineSidebar

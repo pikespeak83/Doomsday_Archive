@@ -18,6 +18,7 @@ import FaultyTerminal from "./reactbits/FaultyTerminal.jsx";
 import LetterGlitch from "./reactbits/LetterGlitch.jsx";
 import LineSidebar from "./reactbits/LineSidebar.jsx";
 import { playSound, setSoundsEnabled } from "./lib/sounds.js";
+import { THEME_FX, BUNDLED_BACKDROPS } from "./lib/themes.js";
 
 const APPS = [
   { id: "archive", label: "Archive", width: 680 },
@@ -171,10 +172,14 @@ export default function App() {
   ];
 
   const backdrop = config.desktopBackground || "map";
+  const theme = config.theme || "green";
+  const fx = THEME_FX[theme] || THEME_FX.green;
+  const themeClass = theme === "green" ? "" : `theme-${theme}`;
+  const bundledBackdrop = BUNDLED_BACKDROPS[backdrop];
 
   if (booted && locked) {
     return (
-      <div className="os-root crt">
+      <div className={`os-root crt ${themeClass}`}>
         <LockScreen onUnlocked={() => setLocked(false)} />
       </div>
     );
@@ -182,16 +187,16 @@ export default function App() {
 
   return (
     <>
-    <div className={`os-root crt ${shuttingDown ? "powering-off" : ""}`}>
+    <div className={`os-root crt ${themeClass} ${shuttingDown ? "powering-off" : ""}`}>
       {!booted && (
         <BootScreen hostname={sysInfo.hostname} onDone={() => setBooted(true)} />
       )}
-      <TopBar title="DOOMSDAY ARCHIVE" stats={stats} onShutdown={shutdown} />
+      <TopBar title="PROJECT CERBERUS" stats={stats} onShutdown={shutdown} />
       <div className="desktop">
         {(backdrop === "map" || backdrop === "terminal") && (
           <div className="desktop-shader">
             <FaultyTerminal
-              tint="#7dff3f"
+              tint={fx.tint}
               brightness={backdrop === "terminal" ? 0.85 : 0.55}
               mouseReact={false}
               timeScale={backdrop === "terminal" ? 0.4 : 0.22}
@@ -199,7 +204,13 @@ export default function App() {
           </div>
         )}
         {backdrop === "glitch" && (
-          <LetterGlitch className="desktop-shader" glitchSpeed={75} opacity={0.35} outerVignette />
+          <LetterGlitch className="desktop-shader" glitchColors={fx.glitch} glitchSpeed={75} opacity={0.35} outerVignette />
+        )}
+        {bundledBackdrop && (
+          <div
+            className="desktop-image bundled"
+            style={{ backgroundImage: `url('${bundledBackdrop.image}')` }}
+          />
         )}
         {backdrop === "image" && config.backgroundImage && (
           <div
