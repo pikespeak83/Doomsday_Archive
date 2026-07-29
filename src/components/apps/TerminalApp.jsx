@@ -41,9 +41,9 @@ export default function TerminalApp({ lanState, sysInfo, config }) {
         print(
           `  NODE ........ ${sysInfo?.hostname || "?"}`,
           `  UPLINK ...... ${lanState?.running ? `ACTIVE :${lanState.port}` : "OFFLINE"}`,
-          `  VAULT ....... ${config?.archiveRoot || "NOT LINKED"}`,
+          `  VAULT ....... ${lanState?.archiveSources?.length ? `${lanState.archiveSources.length} SOURCE(S)` : "NOT LINKED"}`,
           `  DEVICES ..... ${lanState?.approved?.length || 0} cleared, ${lanState?.pending?.length || 0} pending`,
-          `  INTERNET .... NOT REQUIRED`,
+          `  INTERNET .... SEVERED (BY DESIGN)`,
           ""
         );
         break;
@@ -65,14 +65,13 @@ export default function TerminalApp({ lanState, sysInfo, config }) {
         if (list.length) print("");
         break;
       }
-      case "vault":
-        print(
-          config?.archiveRoot
-            ? `  root: ${config.archiveRoot}`
-            : "  no storage linked (see SETTINGS)",
-          ""
-        );
+      case "vault": {
+        const list = lanState?.archiveSources || [];
+        if (!list.length) print("  no storage linked (see SETTINGS)", "");
+        list.forEach((s) => print(`  [${s.id}] ${s.label || s.path} -> ${s.path}`));
+        if (list.length) print("");
         break;
+      }
       case "whoami":
         print(`  ${sysInfo?.username || "operator"} @ ${sysInfo?.hostname || "node"}`, "");
         break;

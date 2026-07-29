@@ -9,32 +9,29 @@ function useClock() {
   return now;
 }
 
-export default function TopBar({ lanState }) {
+/**
+ * Shared OS chrome. `stats` is [{ label, on }]; the window buttons use
+ * whichever bridge (archiveApi / fieldApi) is present.
+ */
+export default function TopBar({ stats = [] }) {
   const now = useClock();
   const time = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  const running = Boolean(lanState?.running);
-  const linked = Boolean(lanState?.archiveRoot);
-  const devices = lanState?.approved?.length || 0;
-  const pending = lanState?.pending?.length || 0;
+  const bridge = window.archiveApi || window.fieldApi;
 
   return (
     <div className="topbar">
       <div className="topbar-left">da_</div>
       <div className="topbar-right">
-        <span className={`topbar-stat ${running ? "" : "off"}`} title="LAN uplink">
-          {running ? "UPLINK:ON" : "UPLINK:OFF"}
-        </span>
-        <span className={`topbar-stat ${linked ? "" : "off"}`} title="Linked storage">
-          {linked ? "VAULT:LINKED" : "VAULT:NONE"}
-        </span>
-        <span className={`topbar-stat ${pending ? "" : devices ? "" : "off"}`} title="Devices">
-          DEV:{devices}{pending ? ` (+${pending}!)` : ""}
-        </span>
+        {stats.map((stat) => (
+          <span key={stat.label} className={`topbar-stat ${stat.on ? "" : "off"}`}>
+            {stat.label}
+          </span>
+        ))}
         <span className="topbar-stat">{time}</span>
         <span className="winbtns">
-          <button className="winbtn" onClick={() => window.archiveApi.minimize()}>_</button>
-          <button className="winbtn" onClick={() => window.archiveApi.maximize()}>[]</button>
-          <button className="winbtn close" onClick={() => window.archiveApi.close()}>x</button>
+          <button className="winbtn" onClick={() => bridge.minimize()}>_</button>
+          <button className="winbtn" onClick={() => bridge.maximize()}>[]</button>
+          <button className="winbtn close" onClick={() => bridge.close()}>x</button>
         </span>
       </div>
     </div>

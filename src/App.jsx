@@ -10,6 +10,7 @@ import UplinkApp from "./components/apps/UplinkApp.jsx";
 import TerminalApp from "./components/apps/TerminalApp.jsx";
 import SettingsApp from "./components/apps/SettingsApp.jsx";
 import HelpApp from "./components/apps/HelpApp.jsx";
+import ClickSpark from "./reactbits/ClickSpark.jsx";
 import { playSound, setSoundsEnabled } from "./lib/sounds.js";
 
 const APPS = [
@@ -87,12 +88,23 @@ export default function App() {
     return <div className="os-root crt" />;
   }
 
+  const sources = lanState?.archiveSources || config.archiveSources || [];
+  const stats = [
+    { label: lanState?.running ? "UPLINK:ON" : "UPLINK:OFF", on: Boolean(lanState?.running) },
+    { label: sources.length ? `VAULT:${sources.length} SRC` : "VAULT:NONE", on: sources.length > 0 },
+    {
+      label: `DEV:${lanState?.approved?.length || 0}${lanState?.pending?.length ? ` (+${lanState.pending.length}!)` : ""}`,
+      on: (lanState?.approved?.length || 0) > 0 || (lanState?.pending?.length || 0) > 0
+    }
+  ];
+
   return (
     <div className="os-root crt">
+      <ClickSpark sparkColor="#b6ff6a">
       {!booted && (
         <BootScreen hostname={sysInfo.hostname} onDone={() => setBooted(true)} />
       )}
-      <TopBar lanState={lanState} />
+      <TopBar stats={stats} />
       <div className="desktop">
         <div className="map-grid" />
         <div className="world-map" />
@@ -119,7 +131,7 @@ export default function App() {
               onClose={() => closeApp(id)}
             >
               {id === "archive" && (
-                <ArchiveApp config={config} onOpenSettings={() => openApp("settings")} />
+                <ArchiveApp sources={sources} onOpenSettings={() => openApp("settings")} />
               )}
               {id === "devices" && <DevicesApp lanState={lanState} />}
               {id === "uplink" && <UplinkApp lanState={lanState} />}
@@ -127,7 +139,7 @@ export default function App() {
                 <TerminalApp lanState={lanState} sysInfo={sysInfo} config={config} />
               )}
               {id === "settings" && (
-                <SettingsApp config={config} lanState={lanState} onConfigChange={setConfig} />
+                <SettingsApp config={config} onConfigChange={setConfig} />
               )}
               {id === "help" && <HelpApp sysInfo={sysInfo} />}
             </WindowFrame>
@@ -142,6 +154,7 @@ export default function App() {
           </div>
         ))}
       </div>
+      </ClickSpark>
     </div>
   );
 }

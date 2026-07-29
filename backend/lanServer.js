@@ -3,7 +3,7 @@ const fs = require("fs");
 const os = require("os");
 const crypto = require("crypto");
 const express = require("express");
-const { listDir, resolveSafe, rootStats } = require("./archiveStore");
+const { listVirtual, resolveVirtual, sourceStats } = require("./archiveStore");
 
 /**
  * LAN uplink server.
@@ -52,6 +52,16 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
     app.disable("x-powered-by");
     app.use(express.json({ limit: "64kb" }));
 
+    // The field terminal app runs from file:// or another origin; the token
+    // check is the real gate, so permissive CORS on this LAN-only service is fine.
+    app.use((req, res, next) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Headers", "content-type, x-archive-token");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      if (req.method === "OPTIONS") return res.sendStatus(204);
+      next();
+    });
+
     // Static assets (fonts, sounds) for the portal, from dist in prod or public in dev.
     const assetCandidates = [
       path.join(__dirname, "..", "dist", "assets"),
@@ -72,6 +82,17 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
 
     app.get("/api/ping", (_req, res) => {
       res.json({ ok: true, host: os.hostname(), service: "doomsday-archive" });
+    });
+
+    app.get("/api/host-info", (_req, res) => {
+      const cfg = getConfig();
+      res.json({
+        host: os.hostname(),
+        service: "doomsday-archive",
+        sharing: Boolean(server),
+        sources: (cfg.archiveSources || []).length,
+        allowDownloads: cfg.allowDownloads !== false
+      });
     });
 
     app.post("/api/access/request", (req, res) => {
@@ -130,9 +151,9 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
 
     app.get("/api/files", (req, res) => {
       const cfg = getConfig();
-      if (!cfg.archiveRoot) return res.status(503).json({ error: "no storage linked" });
+      if (!cfg.archiveSources?.length) return res.status(503).json({ error: "no storage linked" });
       try {
-        const listing = listDir(cfg.archiveRoot, String(req.query.path || ""));
+        const listing = listVirtual(cfg.archiveSources, String(req.query.path || ""));
         res.json({ ...listing, allowDownloads: cfg.allowDownloads !== false });
       } catch (err) {
         res.status(400).json({ error: String(err.message || err) });
@@ -141,10 +162,10 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
 
     app.get("/api/download", (req, res) => {
       const cfg = getConfig();
-      if (!cfg.archiveRoot) return res.status(503).json({ error: "no storage linked" });
+      if (!cfg.archiveSources?.length) return res.status(503).json({ error: "no storage linked" });
       if (cfg.allowDownloads === false) return res.status(403).json({ error: "downloads disabled by host" });
       try {
-        const abs = resolveSafe(cfg.archiveRoot, String(req.query.path || ""));
+        const { abs } = resolveVirtual(cfg.archiveSources, String(req.query.path || ""));
         const stat = fs.statSync(abs);
         if (!stat.isFile()) return res.status(400).json({ error: "not a file" });
         const inline = String(req.query.inline || "") === "1";
@@ -254,8 +275,8 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
       interfaces: interfaces(),
       pending: [...pending.values()],
       approved: approvedList().map(({ token, ...rest }) => rest),
-      archiveRoot: cfg.archiveRoot,
-      archiveStats: rootStats(cfg.archiveRoot),
+      archiveSources: cfg.archiveSources || [],
+      sourceStats: sourceStats(cfg.archiveSources),
       allowDownloads: cfg.allowDownloads !== false
     };
   }

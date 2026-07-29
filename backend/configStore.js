@@ -1,21 +1,49 @@
 const path = require("path");
 const fs = require("fs");
 
-function getConfigPath() {
+function getDataDir() {
   try {
     const { app } = require("electron");
     if (app?.isPackaged) {
-      return path.join(app.getPath("userData"), "config.json");
+      return app.getPath("userData");
     }
   } catch {
     // not running under Electron
   }
-  return path.join(process.cwd(), "config.json");
+  return path.join(__dirname, "..");
 }
 
-const defaultConfig = {
-  /** Absolute path of the linked storage device or folder the archive serves from. */
-  archiveRoot: "",
+/** Tiny JSON-file store factory shared by the host and field apps. */
+function createJsonStore(fileName, defaults) {
+  const filePath = path.join(getDataDir(), fileName);
+
+  function read() {
+    if (!fs.existsSync(filePath)) {
+      write({ ...defaults });
+      return { ...defaults };
+    }
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8")) || {};
+      return { ...defaults, ...parsed };
+    } catch {
+      return { ...defaults };
+    }
+  }
+
+  function write(config) {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(config, null, 2), "utf8");
+  }
+
+  return { read, write, filePath };
+}
+
+const hostDefaults = {
+  /**
+   * Storage the vault serves: [{ id, path, label }]. Linking a drive stores
+   * "X:\\" so the ENTIRE drive is available, not a sub-folder.
+   */
+  archiveSources: [],
   /** LAN server port. */
   port: 8737,
   /** When true the LAN uplink starts automatically with the app. */
@@ -28,25 +56,23 @@ const defaultConfig = {
   approvedDevices: []
 };
 
+const hostStore = createJsonStore("config.json", hostDefaults);
+
 function readConfig() {
-  const configPath = getConfigPath();
-  if (!fs.existsSync(configPath)) {
-    writeConfig(defaultConfig);
-    return { ...defaultConfig };
+  const config = hostStore.read();
+  // migrate legacy single-root configs
+  if (config.archiveRoot && !config.archiveSources?.length) {
+    config.archiveSources = [
+      { id: "src0", path: config.archiveRoot, label: config.archiveRoot }
+    ];
+    delete config.archiveRoot;
+    hostStore.write(config);
   }
-  try {
-    const raw = fs.readFileSync(configPath, "utf8");
-    const parsed = JSON.parse(raw) || {};
-    return { ...defaultConfig, ...parsed };
-  } catch {
-    return { ...defaultConfig };
-  }
+  return config;
 }
 
 function writeConfig(config) {
-  const configPath = getConfigPath();
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+  hostStore.write(config);
 }
 
-module.exports = { readConfig, writeConfig, defaultConfig, getConfigPath };
+module.exports = { createJsonStore, readConfig, writeConfig, hostDefaults };

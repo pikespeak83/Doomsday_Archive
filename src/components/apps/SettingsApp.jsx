@@ -1,16 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { playSound, setSoundsEnabled } from "../../lib/sounds.js";
 
-function fmtSize(bytes) {
+function fmtGb(bytes) {
   if (!bytes) return "?";
   const gb = bytes / (1024 * 1024 * 1024);
   return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
 }
 
-/** Link storage, tune uplink, toggle boot animation and sounds. */
-export default function SettingsApp({ config, onConfigChange, lanState }) {
+/** Link full drives or folders to the vault, tune uplink, toggles. */
+export default function SettingsApp({ config, onConfigChange }) {
   const [drives, setDrives] = useState([]);
   const [portDraft, setPortDraft] = useState(String(config.port || 8737));
+  const sources = config.archiveSources || [];
 
   useEffect(() => {
     window.archiveApi.listDrives().then(setDrives);
@@ -22,54 +23,70 @@ export default function SettingsApp({ config, onConfigChange, lanState }) {
     return next;
   }
 
-  async function linkDrive(letter) {
+  async function linkDrive(drive) {
     playSound("confirm", 0.5);
-    await save({ archiveRoot: `${letter}:\\` });
-    await window.archiveApi.restartLan();
+    const next = await window.archiveApi.addDriveSource(drive.letter, drive.label);
+    onConfigChange(next);
   }
 
   async function linkFolder() {
-    const folder = await window.archiveApi.pickFolder();
-    if (!folder) return;
     playSound("confirm", 0.5);
-    await save({ archiveRoot: folder });
-    await window.archiveApi.restartLan();
+    const next = await window.archiveApi.addFolderSource();
+    onConfigChange(next);
   }
+
+  async function unlink(sourceId) {
+    playSound("error", 0.4);
+    const next = await window.archiveApi.removeSource(sourceId);
+    onConfigChange(next);
+  }
+
+  const linkedPaths = new Set(sources.map((s) => s.path.toLowerCase()));
 
   return (
     <div>
       <div className="field-label">LINKED STORAGE (THE VAULT)</div>
-      <p style={{ wordBreak: "break-all" }} className={config.archiveRoot ? "bright" : "warn"}>
-        {config.archiveRoot || "NO DEVICE LINKED"}
-      </p>
+      {!sources.length && <p className="warn">NO DEVICE LINKED.</p>}
+      {sources.length > 0 && (
+        <table className="data-table">
+          <tbody>
+            {sources.map((source) => (
+              <tr key={source.id}>
+                <td className="bright" style={{ wordBreak: "break-all" }}>{source.label || source.path}</td>
+                <td className="dim" style={{ wordBreak: "break-all" }}>{source.path}</td>
+                <td style={{ width: 90 }}>
+                  <button className="btn small danger" onClick={() => unlink(source.id)}>UNLINK</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
         <button className="btn" onClick={linkFolder}>LINK FOLDER...</button>
-        {config.archiveRoot && (
-          <button
-            className="btn danger"
-            onClick={async () => {
-              playSound("error", 0.4);
-              await save({ archiveRoot: "" });
-            }}
-          >
-            UNLINK
-          </button>
-        )}
       </div>
 
-      <div className="field-label">DETECTED DRIVES (CLICK TO LINK WHOLE DRIVE)</div>
+      <div className="field-label">DETECTED DRIVES (LINK SERVES THE FULL DRIVE)</div>
       <table className="data-table">
         <tbody>
-          {drives.map((drive) => (
-            <tr key={drive.letter} className="click" onClick={() => linkDrive(drive.letter)}>
-              <td className="bright">{drive.letter}:</td>
-              <td>{drive.label || <span className="dim">unlabeled</span>}</td>
-              <td className="dim">{drive.type}</td>
-              <td className="dim">
-                {drive.totalBytes ? `${fmtSize(drive.freeBytes)} free / ${fmtSize(drive.totalBytes)}` : ""}
-              </td>
-            </tr>
-          ))}
+          {drives.map((drive) => {
+            const linked = linkedPaths.has(`${drive.letter.toLowerCase()}:\\`);
+            return (
+              <tr key={drive.letter}>
+                <td className="bright">{drive.letter}:</td>
+                <td>{drive.label || <span className="dim">unlabeled</span>}</td>
+                <td className="dim">{drive.type}</td>
+                <td className="dim">
+                  {drive.totalBytes ? `${fmtGb(drive.freeBytes)} free / ${fmtGb(drive.totalBytes)}` : ""}
+                </td>
+                <td style={{ width: 90 }}>
+                  {linked
+                    ? <span className="badge live">LINKED</span>
+                    : <button className="btn small" onClick={() => linkDrive(drive)}>LINK</button>}
+                </td>
+              </tr>
+            );
+          })}
           {!drives.length && <tr><td className="dim">scanning...</td></tr>}
         </tbody>
       </table>
@@ -128,7 +145,7 @@ export default function SettingsApp({ config, onConfigChange, lanState }) {
   );
 }
 
-function Toggle({ label, checked, onChange }) {
+export function Toggle({ label, checked, onChange }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "8px 0" }}>
       <span className="dim" style={{ fontSize: 13, letterSpacing: 2 }}>{label}</span>

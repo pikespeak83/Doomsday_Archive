@@ -213,6 +213,7 @@
   }
 
   function iconFor(entry) {
+    if (entry.type === "drive") return "[DRV]";
     if (entry.type === "dir") return "\u25B8 [DIR]";
     switch (entry.kind) {
       case "image": return "IMG";
@@ -251,12 +252,12 @@
       renderCrumbs();
       var rows = "";
       res.json.entries.forEach(function (entry, i) {
-        var rel = (currentPath ? currentPath + "/" : "") + entry.name;
+        var rel = entry.type === "drive" ? entry.id : (currentPath ? currentPath + "/" : "") + entry.name;
         rows += '<tr class="row" data-i="' + i + '">' +
           '<td class="ico">' + iconFor(entry) + "</td>" +
-          "<td>" + entry.name + "</td>" +
-          '<td class="kind">' + (entry.type === "dir" ? "FOLDER" : (entry.ext || "").toUpperCase()) + "</td>" +
-          '<td class="sz">' + (entry.type === "dir" ? "" : fmtSize(entry.size)) + "</td>" +
+          "<td>" + entry.name + (entry.type === "drive" && entry.online === false ? ' <span class="denied">(OFFLINE)</span>' : "") + "</td>" +
+          '<td class="kind">' + (entry.type === "drive" ? "STORAGE" : entry.type === "dir" ? "FOLDER" : (entry.ext || "").toUpperCase()) + "</td>" +
+          '<td class="sz">' + (entry.type === "file" ? fmtSize(entry.size) : "") + "</td>" +
           "<td>" + (entry.type === "file" && res.json.allowDownloads
             ? '<button class="dl" data-rel="' + encodeURIComponent(rel) + '">RETRIEVE</button>'
             : "") + "</td></tr>";
@@ -266,8 +267,8 @@
         var entry = res.json.entries[Number(tr.getAttribute("data-i"))];
         tr.onclick = function (ev) {
           if (ev.target.classList.contains("dl")) return;
-          var rel = (currentPath ? currentPath + "/" : "") + entry.name;
-          if (entry.type === "dir") loadFiles(rel);
+          var rel = entry.type === "drive" ? entry.id : (currentPath ? currentPath + "/" : "") + entry.name;
+          if (entry.type === "dir" || entry.type === "drive") loadFiles(rel);
           else if (["image", "video", "audio", "text"].indexOf(entry.kind) >= 0) {
             window.open("/api/download?inline=1&path=" + encodeURIComponent(rel) + "&token=" + encodeURIComponent(token), "_blank");
           }

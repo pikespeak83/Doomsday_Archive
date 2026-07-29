@@ -14,3 +14,8 @@ All assets ship inside the app so it runs fully offline.
 ## Artwork
 - world-map.svg: "World map - low resolution" from Wikimedia Commons, public domain.
 - Seal, folder icons, and app icon: original SVG artwork made for this project.
+
+## UI components (src/reactbits)
+- DecryptedText, LetterGlitch, ClickSpark: vendored from reactbits.dev
+  (https://github.com/DavidHDev/react-bits), MIT license, trimmed to run
+  fully offline with no external dependencies.

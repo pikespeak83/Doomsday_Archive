@@ -1,35 +1,51 @@
 # Doomsday Archive
 
-An offline, LAN-only file archive terminal styled as a government containment
-OS ("Data Containment Initiative"). Built with Electron, Vite, and React.
+Two offline apps styled as a government containment OS ("Data Containment
+Initiative"), built for when the grid goes down: ALL wifi and online services
+can be dead and everything here still works.
 
-No internet. No accounts. No cloud. The host PC serves an archive from a
-linked hard drive, SSD, or external storage, and other devices in the house
-connect over the local network and must be approved by the host.
+- **Doomsday Archive** (host): runs on the PC that owns the storage. Link
+  whole hard drives, SSDs, or external storage; the vault serves them in
+  full over the local wire.
+- **Doomsday Field Terminal** (client): runs on every other PC in the house.
+  Finds the host automatically (UDP broadcast, no config), requests
+  clearance, then browses and retrieves files.
+
+Phones and machines without the client app can still use the browser portal
+at `http://<host-ip>:8737`.
+
+No internet. No accounts. No cloud. Ever.
 
 ## Features
 
 - Government terminal aesthetic: green phosphor CRT, world map, DCI seal
-- Boot sequence with "WELCOME BACK, <PC NAME>" animation (no login)
-- Link any drive or folder as the vault; files are served read-only
-- LAN uplink server: other devices open `http://<host-ip>:8737` in a browser
-- Host approval flow: every device must be granted clearance in DEVICES
+- ReactBits components (vendored offline): DecryptedText, LetterGlitch,
+  ClickSpark
+- Boot sequence with "WELCOME BACK, <PC NAME>" decryption animation, no login
+- Full-drive vault: link any number of whole drives or folders
+- Zero-config discovery: field terminals find the host over UDP broadcast
+- Host approval flow: every device must be granted clearance in DEVICES,
+  and can be revoked at any time
 - Works with zero internet: ethernet + switch, direct PC-to-PC cable, or the
   host's Windows Mobile hotspot
-- QR code for phones, live toasts for access requests and downloads
+- Field downloads land in Downloads/Doomsday Archive with progress toasts
 - Bundled CC0 sounds and OFL fonts so everything runs offline
 
 ## Dev
 
 ```bash
 npm install
-npm run dev
+npm run dev          # host app
+npm run dev:client   # field terminal
+npm run dev:both     # both at once (great for testing approval flow)
 ```
 
-## Build the Windows installer
+## Build the Windows installers
 
 ```bash
-npm run dist
+npm run dist         # both installers
+npm run dist:host    # Doomsday-Archive-Setup-x.y.z.exe
+npm run dist:client  # Doomsday-Field-Terminal-Setup-x.y.z.exe
 ```
 
 Output lands in `release/`.

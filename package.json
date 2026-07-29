@@ -8,10 +8,14 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on tcp:5178 && electron .\"",
+    "dev:client": "concurrently \"vite\" \"wait-on tcp:5178 && electron electron/clientMain.js\"",
+    "dev:both": "concurrently \"vite\" \"wait-on tcp:5178 && electron .\" \"wait-on tcp:5178 && electron electron/clientMain.js\"",
     "build:web": "vite build",
     "icons:win": "node scripts/build-app-icon.js && node scripts/build-win-icon.js",
     "start": "electron .",
-    "dist": "npm run icons:win && npm run build:web && electron-builder --win nsis"
+    "dist:host": "npm run icons:win && npm run build:web && electron-builder --win nsis",
+    "dist:client": "npm run icons:win && npm run build:web && electron-builder --win nsis --config electron-builder.client.json",
+    "dist": "npm run icons:win && npm run build:web && electron-builder --win nsis && electron-builder --win nsis --config electron-builder.client.json"
   },
   "dependencies": {
     "express": "^4.21.2",

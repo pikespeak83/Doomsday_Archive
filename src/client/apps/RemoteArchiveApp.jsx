@@ -1,58 +1,37 @@
 import React, { useEffect, useState } from "react";
 import { playSound } from "../../lib/sounds.js";
+import { baseUrl, listFiles, downloadUrl } from "../api.js";
+import { fmtSize } from "../../components/apps/ArchiveApp.jsx";
 
-export function fmtSize(bytes) {
-  if (bytes == null) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB`;
-  const mb = kb / 1024;
-  if (mb < 1024) return `${mb.toFixed(1)} MB`;
-  return `${(mb / 1024).toFixed(2)} GB`;
-}
-
-/**
- * Host-side vault browser. The top level lists every linked source
- * (whole drives or folders); everything under a drive is reachable.
- */
-export default function ArchiveApp({ sources, onOpenSettings }) {
-  const [listing, setListing] = useState({ path: "", entries: [] });
+/** Remote vault browser for field devices: browse everything, retrieve files. */
+export default function RemoteArchiveApp({ connection, config, onAuthLost }) {
+  const [listing, setListing] = useState({ path: "", entries: [], allowDownloads: true });
   const [error, setError] = useState("");
+  const base = baseUrl(connection.address, connection.port);
 
   async function load(rel) {
-    const result = await window.archiveApi.browse(rel);
-    if (result.error) setError(result.error);
-    else {
+    try {
+      const res = await listFiles(base, config.token, rel);
+      if (res.status === 401) {
+        onAuthLost();
+        return;
+      }
+      if (!res.ok) {
+        setError(res.json.error || "TRANSMISSION ERROR");
+        return;
+      }
       setError("");
-      setListing(result);
+      setListing(res.json);
+    } catch {
+      setError("HOST NODE UNREACHABLE");
     }
   }
 
   useEffect(() => {
-    if (sources?.length) void load(listing.path || "");
-  }, [sources?.length]);
-
-  if (!sources?.length) {
-    return (
-      <div>
-        <p className="warn">NO STORAGE DEVICE LINKED.</p>
-        <p className="dim" style={{ margin: "8px 0" }}>
-          Link a hard drive, SSD, or external storage in SETTINGS. Linked
-          drives are served in full, top to bottom.
-        </p>
-        <button className="btn" onClick={onOpenSettings}>OPEN SETTINGS</button>
-      </div>
-    );
-  }
+    void load("");
+  }, []);
 
   const crumbs = listing.path ? listing.path.split("/") : [];
-  const labelFor = (segment, index) => {
-    if (index === 0) {
-      const source = sources.find((s) => s.id === segment);
-      if (source) return source.label || source.path;
-    }
-    return segment;
-  };
 
   return (
     <div>
@@ -60,8 +39,8 @@ export default function ArchiveApp({ sources, onOpenSettings }) {
         <a
           href="#"
           className="bright"
-          onClick={(e) => { e.preventDefault(); playSound("click", 0.35); void load(""); }}
           style={{ textDecoration: "none" }}
+          onClick={(e) => { e.preventDefault(); playSound("click", 0.35); void load(""); }}
         >
           /VAULT
         </a>
@@ -78,7 +57,7 @@ export default function ArchiveApp({ sources, onOpenSettings }) {
                 void load(crumbs.slice(0, i + 1).join("/"));
               }}
             >
-              {labelFor(part, i)}
+              {part}
             </a>
           </React.Fragment>
         ))}
@@ -86,7 +65,7 @@ export default function ArchiveApp({ sources, onOpenSettings }) {
       {error && <p className="warn">{error}</p>}
       <table className="data-table">
         <thead>
-          <tr><th style={{ width: 52 }}></th><th>NAME</th><th>TYPE</th><th>SIZE</th></tr>
+          <tr><th style={{ width: 52 }}></th><th>NAME</th><th>SIZE</th><th></th></tr>
         </thead>
         <tbody>
           {listing.entries.map((entry) => {
@@ -97,11 +76,6 @@ export default function ArchiveApp({ sources, onOpenSettings }) {
               <tr
                 key={entry.id || entry.name}
                 className="click"
-                onDoubleClick={() => {
-                  playSound("select", 0.4);
-                  if (entry.type === "file") void window.archiveApi.openFile(rel);
-                  else void load(rel);
-                }}
                 onClick={() => {
                   if (entry.type !== "file") {
                     playSound("click", 0.35);
@@ -118,10 +92,21 @@ export default function ArchiveApp({ sources, onOpenSettings }) {
                     <span className="warn"> (OFFLINE)</span>
                   )}
                 </td>
-                <td className="dim">
-                  {entry.type === "drive" ? "STORAGE" : entry.type === "dir" ? "FOLDER" : (entry.ext || "").toUpperCase()}
-                </td>
                 <td className="dim">{entry.type === "file" ? fmtSize(entry.size) : ""}</td>
+                <td style={{ width: 100 }}>
+                  {entry.type === "file" && listing.allowDownloads && (
+                    <button
+                      className="btn small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        playSound("select", 0.45);
+                        void window.fieldApi.download(downloadUrl(base, config.token, rel));
+                      }}
+                    >
+                      RETRIEVE
+                    </button>
+                  )}
+                </td>
               </tr>
             );
           })}
@@ -131,7 +116,7 @@ export default function ArchiveApp({ sources, onOpenSettings }) {
         </tbody>
       </table>
       <p className="dim" style={{ marginTop: 10, fontSize: 12 }}>
-        Double-click a file to open it with the system default app.
+        Retrieved files land in Downloads/Doomsday Archive on this device.
       </p>
     </div>
   );

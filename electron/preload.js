@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld("archiveApi", {
 
   pickFolder: () => ipcRenderer.invoke("archive:pickFolder"),
   listDrives: () => ipcRenderer.invoke("archive:listDrives"),
+  addDriveSource: (letter, label) => ipcRenderer.invoke("archive:addDrive", letter, label),
+  addFolderSource: () => ipcRenderer.invoke("archive:addFolder"),
+  removeSource: (sourceId) => ipcRenderer.invoke("archive:removeSource", sourceId),
   browse: (relPath) => ipcRenderer.invoke("archive:browse", relPath),
   getArchiveStats: () => ipcRenderer.invoke("archive:stats"),
   openFile: (relPath) => ipcRenderer.invoke("archive:openFile", relPath),

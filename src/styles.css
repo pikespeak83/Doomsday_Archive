@@ -85,6 +85,10 @@ body {
   gap: 28px;
   cursor: pointer;
 }
+.boot > *:not(.boot-glitch) {
+  position: relative;
+  z-index: 2;
+}
 .boot-seal {
   width: 240px;
   height: 240px;
@@ -422,8 +426,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-.toast {
+}.toast {
   border: 1px solid var(--green);
   background: rgba(8, 24, 4, 0.95);
   color: var(--green-bright);
@@ -438,3 +441,28 @@ body {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ------------------------------------------------ field terminal connect */
+.connect-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  z-index: 5;
+}
+.connect-seal {
+  width: 150px;
+  height: 150px;
+  filter: drop-shadow(0 0 18px rgba(125, 255, 63, 0.35));
+}
+.connect-panel {
+  width: min(560px, calc(100vw - 60px));
+  max-height: 62vh;
+  overflow-y: auto;
+}
+.connect-panel::-webkit-scrollbar { width: 9px; }
+.connect-panel::-webkit-scrollbar-thumb { background: var(--green-dark); border: 1px solid var(--green-faint); }
+.status-line { font-size: 15px; letter-spacing: 1px; line-height: 1.7; }

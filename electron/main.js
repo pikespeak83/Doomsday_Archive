@@ -5,7 +5,8 @@ const { execFile } = require("child_process");
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { readConfig, writeConfig } = require("../backend/configStore");
 const { createLanServer } = require("../backend/lanServer");
-const { listDir, rootStats } = require("../backend/archiveStore");
+const { createResponder } = require("../backend/discovery");
+const { listVirtual, resolveVirtual, sourceStats } = require("../backend/archiveStore");
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -50,6 +51,12 @@ const lan = createLanServer({
     sendToRenderer("lan:state", lan.getState());
   }
 });
+
+const discovery = createResponder(() => ({
+  port: currentConfig.port,
+  running: lan.getState().running,
+  version: appVersion
+}));
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -155,21 +162,65 @@ ipcMain.handle("archive:pickFolder", async () => {
 
 ipcMain.handle("archive:listDrives", () => listDrives());
 
+function nextSourceId() {
+  const used = new Set((currentConfig.archiveSources || []).map((s) => s.id));
+  let i = 0;
+  while (used.has(`src${i}`)) i += 1;
+  return `src${i}`;
+}
+
+function addSource(sourcePath, label) {
+  const sources = [...(currentConfig.archiveSources || [])];
+  if (sources.some((s) => path.resolve(s.path).toLowerCase() === path.resolve(sourcePath).toLowerCase())) {
+    return currentConfig;
+  }
+  sources.push({ id: nextSourceId(), path: sourcePath, label: label || sourcePath });
+  currentConfig = { ...currentConfig, archiveSources: sources };
+  writeConfig(currentConfig);
+  sendToRenderer("lan:state", lan.getState());
+  return currentConfig;
+}
+
+ipcMain.handle("archive:addDrive", (_event, letter, label) => {
+  const clean = String(letter || "").replace(/[^a-z]/gi, "").toUpperCase().slice(0, 1);
+  if (!clean) return currentConfig;
+  return addSource(`${clean}:\\`, label ? `${clean}: ${label}` : `${clean}: DRIVE`);
+});
+
+ipcMain.handle("archive:addFolder", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Link a folder to the vault",
+    properties: ["openDirectory"]
+  });
+  if (result.canceled || !result.filePaths?.[0]) return currentConfig;
+  const folder = result.filePaths[0];
+  return addSource(folder, folder);
+});
+
+ipcMain.handle("archive:removeSource", (_event, sourceId) => {
+  const sources = (currentConfig.archiveSources || []).filter((s) => s.id !== sourceId);
+  currentConfig = { ...currentConfig, archiveSources: sources };
+  writeConfig(currentConfig);
+  sendToRenderer("lan:state", lan.getState());
+  return currentConfig;
+});
+
 ipcMain.handle("archive:browse", (_event, relPath) => {
-  if (!currentConfig.archiveRoot) return { path: "", entries: [], error: "no storage linked" };
+  if (!currentConfig.archiveSources?.length) {
+    return { path: "", entries: [], error: "no storage linked" };
+  }
   try {
-    return listDir(currentConfig.archiveRoot, relPath || "");
+    return listVirtual(currentConfig.archiveSources, relPath || "");
   } catch (err) {
     return { path: "", entries: [], error: String(err.message || err) };
   }
 });
 
-ipcMain.handle("archive:stats", () => rootStats(currentConfig.archiveRoot));
+ipcMain.handle("archive:stats", () => sourceStats(currentConfig.archiveSources));
 
 ipcMain.handle("archive:openFile", (_event, relPath) => {
   try {
-    const abs = path.resolve(currentConfig.archiveRoot, relPath || "");
-    if (!abs.toLowerCase().startsWith(path.resolve(currentConfig.archiveRoot).toLowerCase())) return false;
+    const { abs } = resolveVirtual(currentConfig.archiveSources, relPath || "");
     shell.openPath(abs);
     return true;
   } catch {
@@ -235,6 +286,7 @@ ipcMain.handle("window:close", () => {
 
 app.whenReady().then(async () => {
   createMainWindow();
+  discovery.start();
   if (currentConfig.sharingEnabled) {
     await lan.start(currentConfig.port);
   }
@@ -249,6 +301,7 @@ app.on("second-instance", () => {
 
 app.on("window-all-closed", () => {
   isQuitting = true;
+  discovery.stop();
   app.quit();
 });
 

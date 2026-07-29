@@ -3,7 +3,7 @@ const { createLanServer } = require("../backend/lanServer");
 
 const config = {
   approvedDevices: [],
-  archiveRoot: process.cwd(),
+  archiveSources: [{ id: "src0", path: process.cwd(), label: "PROJECT" }],
   port: 8737,
   allowDownloads: true
 };
@@ -41,17 +41,22 @@ srv.start(8737).then(async (state) => {
   const files = await fetch("http://127.0.0.1:8737/api/files?path=", {
     headers: { "x-archive-token": dev.token }
   }).then((r) => r.json());
-  console.log("files entries", files.entries?.length);
+  console.log("root entries (sources)", files.entries?.length, JSON.stringify(files.entries));
+
+  const inside = await fetch("http://127.0.0.1:8737/api/files?path=src0", {
+    headers: { "x-archive-token": dev.token }
+  }).then((r) => r.json());
+  console.log("src0 entries", inside.entries?.length);
 
   const noauth = await fetch("http://127.0.0.1:8737/api/files?path=");
   console.log("noauth status", noauth.status);
 
   const trav = await fetch(
-    `http://127.0.0.1:8737/api/download?path=..%5C..%5Cwindows%5Cwin.ini&token=${dev.token}`
+    `http://127.0.0.1:8737/api/download?path=src0%2F..%5C..%5Cwindows%5Cwin.ini&token=${dev.token}`
   );
   console.log("traversal status", trav.status);
 
-  const dl = await fetch(`http://127.0.0.1:8737/api/download?path=package.json&token=${dev.token}`);
+  const dl = await fetch(`http://127.0.0.1:8737/api/download?path=src0%2Fpackage.json&token=${dev.token}`);
   console.log("download status", dl.status, "disposition:", dl.headers.get("content-disposition"));
 
   srv.revoke(deviceId);
