@@ -52,6 +52,19 @@ const hostDefaults = {
   allowDownloads: true,
   uiSoundsEnabled: true,
   bootAnimationEnabled: true,
+  /** scrypt hash of the vault passphrase; empty = no passphrase. */
+  passwordHash: "",
+  passwordSalt: "",
+  /** Keep serving from the tray when the window is closed. */
+  runInTray: false,
+  /** Launch with Windows. */
+  startWithPc: false,
+  /** Windows toast notifications for access requests etc. */
+  notificationsEnabled: true,
+  /** Desktop backdrop: "map" | "terminal" | "glitch" | "image" | "none". */
+  desktopBackground: "map",
+  /** Absolute path of a custom background image (desktopBackground="image"). */
+  backgroundImage: "",
   /** Devices the host has approved: { id, name, token, approvedAt, lastSeen }. */
   approvedDevices: []
 };

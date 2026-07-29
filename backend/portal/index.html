@@ -144,6 +144,10 @@
       <div class="status-line" style="margin-bottom:12px">IDENTIFY YOURSELF TO REQUEST ACCESS FROM THE HOST NODE.</div>
       <label for="name">OPERATIVE NAME</label>
       <input id="name" type="text" maxlength="40" placeholder="e.g. KITCHEN-LAPTOP / DAD-PHONE" autocomplete="off">
+      <div id="pass-wrap" class="hidden">
+        <label for="pass" style="margin-top:10px">HOST PASSPHRASE</label>
+        <input id="pass" type="password" placeholder="required by this node" autocomplete="off">
+      </div>
       <button id="request">TRANSMIT ACCESS REQUEST</button>
     </section>
 
@@ -161,6 +165,9 @@
     </section>
 
     <section id="step-files" class="hidden">
+      <div id="feed-banner" class="panel hidden" style="border-color:var(--g); cursor:pointer">
+        <div class="status-line blink">LIVE FEED ACTIVE :: <span id="feed-name"></span> :: CLICK TO WATCH</div>
+      </div>
       <div class="panel">
         <div class="status-line" style="margin-bottom:8px">CLEARANCE GRANTED. ARCHIVE MOUNTED READ-ONLY.</div>
         <div class="crumbs" id="crumbs"></div>
@@ -171,6 +178,13 @@
       </div>
     </section>
   </main>
+  <div id="feed-overlay" class="hidden" style="position:fixed;inset:0;z-index:60;background:rgba(1,4,2,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px">
+    <div style="width:min(900px,94vw)">
+      <div class="status-line" style="margin-bottom:8px">LIVE FEED :: <span id="feed-title"></span></div>
+      <video id="feed-video" controls style="width:100%;max-height:70vh;background:#000;border:1px solid var(--g-dim)"></video>
+      <button id="feed-close" style="margin-top:10px">LEAVE FEED</button>
+    </div>
+  </div>
   <footer>PROTECT // CONTAIN // SECURE :: LOCAL TRANSMISSION ONLY, NO INTERNET LINK</footer>
 
 <script>
@@ -242,6 +256,7 @@
 
   function loadFiles(p) {
     currentPath = p || "";
+    pollFeed();
     api("/api/files?path=" + encodeURIComponent(currentPath)).then(function (res) {
       if (res.status === 401) { token = ""; localStorage.removeItem("da_token"); return begin(); }
       if (!res.ok) {
@@ -308,8 +323,14 @@
     fetch("/api/access/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deviceId: deviceId, name: name })
+      body: JSON.stringify({ deviceId: deviceId, name: name, password: $("pass").value || "" })
     }).then(function (r) { return r.json(); }).then(function (j) {
+      if (j.status === "unauthorized") {
+        $("pass-wrap").classList.remove("hidden");
+        $("pass").focus();
+        alert("This node demands a passphrase (or the one entered is wrong).");
+        return;
+      }
       if (j.status === "approved") { token = j.token; localStorage.setItem("da_token", token); loadFiles(""); return; }
       if (j.status === "denied") { show("step-denied"); return; }
       show("step-wait");
@@ -318,7 +339,57 @@
     });
   }
 
+  /* ---- live feed ---- */
+  var feedTimer = null;
+  var feedState = null;
+  var feedOffset = 0;
+
+  function pollFeed() {
+    if (!token) return;
+    fetch("/api/broadcast/state", { headers: { "x-archive-token": token } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (state) {
+        if (!state) return;
+        feedOffset = state.serverNow - Date.now();
+        if (state.active) {
+          feedState = state;
+          $("feed-name").textContent = state.name;
+          $("feed-banner").classList.remove("hidden");
+        } else {
+          feedState = null;
+          $("feed-banner").classList.add("hidden");
+          $("feed-overlay").classList.add("hidden");
+          var v = $("feed-video");
+          if (v.src) { v.pause(); v.removeAttribute("src"); v.load(); }
+        }
+      })
+      .catch(function () {});
+  }
+
+  function joinFeed() {
+    if (!feedState) return;
+    var v = $("feed-video");
+    $("feed-title").textContent = feedState.name;
+    v.src = "/api/download?inline=1&path=" + encodeURIComponent(feedState.path) + "&token=" + encodeURIComponent(token);
+    $("feed-overlay").classList.remove("hidden");
+    v.onloadedmetadata = function () {
+      v.currentTime = Math.max(0, (Date.now() + feedOffset - feedState.startedAt) / 1000);
+      v.play().catch(function () {});
+    };
+  }
+
+  $("feed-banner").onclick = joinFeed;
+  $("feed-close").onclick = function () {
+    var v = $("feed-video");
+    v.pause();
+    $("feed-overlay").classList.add("hidden");
+  };
+  setInterval(pollFeed, 5000);
+
   function begin() {
+    fetch("/api/host-info").then(function (r) { return r.json(); }).then(function (info) {
+      if (info.passwordRequired) $("pass-wrap").classList.remove("hidden");
+    }).catch(function () {});
     if (token) {
       // token might still be valid; try listing
       api("/api/files?path=").then(function (res) {

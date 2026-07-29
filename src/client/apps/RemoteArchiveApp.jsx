@@ -3,11 +3,13 @@ import { playSound } from "../../lib/sounds.js";
 import { baseUrl, listFiles, downloadUrl } from "../api.js";
 import { fmtSize } from "../../components/apps/ArchiveApp.jsx";
 
-/** Remote vault browser for field devices: browse everything, retrieve files. */
-export default function RemoteArchiveApp({ connection, config, onAuthLost }) {
+/** Remote vault browser for field devices: browse everything, view media, retrieve files. */
+export default function RemoteArchiveApp({ connection, config, onAuthLost, onOpenMedia }) {
   const [listing, setListing] = useState({ path: "", entries: [], allowDownloads: true });
   const [error, setError] = useState("");
   const base = baseUrl(connection.address, connection.port);
+
+  const VIEWABLE = ["image", "video", "audio", "text"];
 
   async function load(rel) {
     try {
@@ -80,6 +82,13 @@ export default function RemoteArchiveApp({ connection, config, onAuthLost }) {
                   if (entry.type !== "file") {
                     playSound("click", 0.35);
                     void load(rel);
+                  } else if (VIEWABLE.includes(entry.kind)) {
+                    playSound("select", 0.4);
+                    onOpenMedia({
+                      kind: entry.kind,
+                      name: entry.name,
+                      src: downloadUrl(base, config.token, rel, true)
+                    });
                   }
                 }}
               >
@@ -116,7 +125,8 @@ export default function RemoteArchiveApp({ connection, config, onAuthLost }) {
         </tbody>
       </table>
       <p className="dim" style={{ marginTop: 10, fontSize: 12 }}>
-        Retrieved files land in Downloads/Doomsday Archive on this device.
+        Click media to view it here. RETRIEVE copies files to
+        Downloads/Doomsday Archive on this device.
       </p>
     </div>
   );

@@ -3,8 +3,8 @@ import { playSound } from "../lib/sounds.js";
 
 let zCounter = 50;
 
-/** Draggable window with title bar, close button, and focus-to-front. */
-export default function WindowFrame({ title, onClose, initial, width, children }) {
+/** Draggable window with title bar, minimize/close, and focus-to-front. */
+export default function WindowFrame({ title, onClose, onMinimize, minimized, initial, width, children }) {
   const [pos, setPos] = useState(initial || { x: 120, y: 70 });
   const [z, setZ] = useState(() => ++zCounter);
   const drag = useRef(null);
@@ -34,7 +34,7 @@ export default function WindowFrame({ title, onClose, initial, width, children }
   return (
     <div
       className="window"
-      style={{ left: pos.x, top: pos.y, zIndex: z, width }}
+      style={{ left: pos.x, top: pos.y, zIndex: z, width, display: minimized ? "none" : undefined }}
       onMouseDown={() => setZ(++zCounter)}
     >
       <div
@@ -44,13 +44,26 @@ export default function WindowFrame({ title, onClose, initial, width, children }
         onPointerUp={onPointerUp}
       >
         <span>{title}</span>
-        <button
-          className="window-close"
-          onClick={onClose}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          x
-        </button>
+        <span style={{ display: "flex", gap: 5 }}>
+          {onMinimize && (
+            <button
+              className="window-close"
+              onClick={onMinimize}
+              onPointerDown={(e) => e.stopPropagation()}
+              title="Minimize"
+            >
+              _
+            </button>
+          )}
+          <button
+            className="window-close"
+            onClick={onClose}
+            onPointerDown={(e) => e.stopPropagation()}
+            title="Close"
+          >
+            x
+          </button>
+        </span>
       </div>
       <div className="window-body">{children}</div>
     </div>

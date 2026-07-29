@@ -1,18 +1,27 @@
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const { Readable } = require("stream");
 const { execFile } = require("child_process");
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, protocol, shell } = require("electron");
 const { readConfig, writeConfig } = require("../backend/configStore");
 const { createLanServer } = require("../backend/lanServer");
 const { createResponder } = require("../backend/discovery");
 const { createUpdater } = require("../backend/updater");
-const { listVirtual, resolveVirtual, sourceStats } = require("../backend/archiveStore");
+const { listVirtual, resolveVirtual, sourceStats, kindOf } = require("../backend/archiveStore");
+const vaultOps = require("../backend/vaultOps");
+const { hashPassword, verifyPassword } = require("../backend/passwordStore");
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
 }
+
+// vault:// streams media from linked sources; dabg:// serves the custom backdrop.
+protocol.registerSchemesAsPrivileged([
+  { scheme: "vault", privileges: { stream: true, supportFetchAPI: true, bypassCSP: true } },
+  { scheme: "dabg", privileges: { stream: true, bypassCSP: true } }
+]);
 
 const APP_DISPLAY_NAME = "Doomsday Archive";
 app.setName(APP_DISPLAY_NAME);
@@ -29,10 +38,22 @@ app.setPath("cache", cacheDir);
 app.commandLine.appendSwitch("disk-cache-dir", cacheDir);
 
 let mainWindow = null;
+let tray = null;
 let currentConfig = readConfig();
 let isQuitting = false;
+let vaultUnlocked = false;
 const pkg = require("../package.json");
 const appVersion = String(pkg?.version || "0.0.0").trim() || "0.0.0";
+
+function notifyWindows(title, body) {
+  if (currentConfig.notificationsEnabled === false) return;
+  if (!Notification.isSupported()) return;
+  try {
+    new Notification({ title, body, icon: path.join(__dirname, "..", "assets", "app-icon.png") }).show();
+  } catch {
+    // notifications unavailable
+  }
+}
 
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -50,6 +71,9 @@ const lan = createLanServer({
   onEvent: (event) => {
     sendToRenderer("lan:event", event);
     sendToRenderer("lan:state", lan.getState());
+    if (event.type === "access-request" && (!mainWindow || !mainWindow.isVisible() || !mainWindow.isFocused())) {
+      notifyWindows("Doomsday Archive", `Access request from ${event.device?.name || "unknown device"}`);
+    }
   }
 });
 
@@ -101,8 +125,81 @@ function createMainWindow() {
     mainWindow.loadURL("http://localhost:5178");
   }
 
+  mainWindow.on("close", (event) => {
+    if (currentConfig.runInTray && !isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+      notifyWindows("Doomsday Archive", "Still transmitting from the tray. The vault stays open.");
+    }
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
+  });
+}
+
+function createTray() {
+  if (tray) return;
+  try {
+    tray = new Tray(path.join(__dirname, "..", "assets", "app-icon.ico"));
+    tray.setToolTip("Doomsday Archive");
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: "Open Archive Terminal", click: () => wakeWindow() },
+      { type: "separator" },
+      {
+        label: "Quit (stops the uplink)",
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        }
+      }
+    ]));
+    tray.on("double-click", () => wakeWindow());
+  } catch {
+    tray = null;
+  }
+}
+
+function destroyTray() {
+  tray?.destroy();
+  tray = null;
+}
+
+function wakeWindow() {
+  if (!mainWindow) {
+    createMainWindow();
+    return;
+  }
+  mainWindow.show();
+  mainWindow.focus();
+  sendToRenderer("os:wake", {});
+}
+
+/** Stream a vault file with HTTP Range support so video seeking works. */
+function serveVaultFile(request, abs) {
+  const stat = fs.statSync(abs);
+  if (!stat.isFile()) return new Response("not a file", { status: 400 });
+  const range = request.headers.get("range");
+  const total = stat.size;
+  if (range) {
+    const match = /bytes=(\d*)-(\d*)/.exec(range);
+    let start = match?.[1] ? parseInt(match[1], 10) : 0;
+    let end = match?.[2] ? parseInt(match[2], 10) : total - 1;
+    if (Number.isNaN(start) || start < 0) start = 0;
+    if (Number.isNaN(end) || end >= total) end = total - 1;
+    if (start > end) return new Response(null, { status: 416 });
+    return new Response(Readable.toWeb(fs.createReadStream(abs, { start, end })), {
+      status: 206,
+      headers: {
+        "Content-Range": `bytes ${start}-${end}/${total}`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": String(end - start + 1)
+      }
+    });
+  }
+  return new Response(Readable.toWeb(fs.createReadStream(abs)), {
+    status: 200,
+    headers: { "Content-Length": String(total), "Accept-Ranges": "bytes" }
   });
 }
 
@@ -157,6 +254,17 @@ ipcMain.handle("config:get", () => currentConfig);
 ipcMain.handle("config:save", (_event, partial) => {
   currentConfig = { ...currentConfig, ...partial };
   writeConfig(currentConfig);
+  if ("runInTray" in partial) {
+    if (partial.runInTray) createTray();
+    else destroyTray();
+  }
+  if ("startWithPc" in partial) {
+    try {
+      app.setLoginItemSettings({ openAtLogin: Boolean(partial.startWithPc) });
+    } catch {
+      // unsupported environment
+    }
+  }
   return currentConfig;
 });
 
@@ -245,6 +353,115 @@ ipcMain.handle("archive:openFile", (_event, relPath) => {
   }
 });
 
+// ---- vault write operations (host only)
+
+function vaultOp(fn) {
+  try {
+    return { ok: Boolean(fn()) };
+  } catch (err) {
+    return { ok: false, error: String(err.message || err) };
+  }
+}
+
+ipcMain.handle("vault:mkdir", (_e, parentRel, name) =>
+  vaultOp(() => vaultOps.makeFolder(currentConfig.archiveSources, parentRel, name)));
+ipcMain.handle("vault:newFile", (_e, parentRel, name) =>
+  vaultOp(() => vaultOps.makeFile(currentConfig.archiveSources, parentRel, name)));
+ipcMain.handle("vault:rename", (_e, relPath, newName) =>
+  vaultOp(() => vaultOps.renameEntry(currentConfig.archiveSources, relPath, newName)));
+ipcMain.handle("vault:move", (_e, fromRel, toDirRel) =>
+  vaultOp(() => vaultOps.moveEntry(currentConfig.archiveSources, fromRel, toDirRel)));
+ipcMain.handle("vault:delete", async (_e, relPath) => {
+  try {
+    await vaultOps.deleteEntry(currentConfig.archiveSources, relPath);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err.message || err) };
+  }
+});
+
+// ---- security (vault passphrase)
+
+ipcMain.handle("security:getState", () => ({
+  passwordSet: Boolean(currentConfig.passwordHash),
+  unlocked: vaultUnlocked || !currentConfig.passwordHash
+}));
+
+ipcMain.handle("security:unlock", (_event, password) => {
+  const ok = verifyPassword(password, currentConfig.passwordHash, currentConfig.passwordSalt);
+  if (ok) vaultUnlocked = true;
+  return { ok };
+});
+
+ipcMain.handle("security:setPassword", (_event, currentPassword, newPassword) => {
+  if (currentConfig.passwordHash &&
+      !verifyPassword(currentPassword, currentConfig.passwordHash, currentConfig.passwordSalt)) {
+    return { ok: false, error: "current passphrase is wrong" };
+  }
+  const clean = String(newPassword || "");
+  if (clean.length < 4) return { ok: false, error: "passphrase must be at least 4 characters" };
+  const { hash, salt } = hashPassword(clean);
+  currentConfig = { ...currentConfig, passwordHash: hash, passwordSalt: salt };
+  writeConfig(currentConfig);
+  vaultUnlocked = true;
+  return { ok: true };
+});
+
+ipcMain.handle("security:clearPassword", (_event, currentPassword) => {
+  if (currentConfig.passwordHash &&
+      !verifyPassword(currentPassword, currentConfig.passwordHash, currentConfig.passwordSalt)) {
+    return { ok: false, error: "current passphrase is wrong" };
+  }
+  currentConfig = { ...currentConfig, passwordHash: "", passwordSalt: "" };
+  writeConfig(currentConfig);
+  vaultUnlocked = true;
+  return { ok: true };
+});
+
+// ---- desktop background
+
+ipcMain.handle("settings:pickBackgroundImage", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Choose a desktop backdrop",
+    properties: ["openFile"],
+    filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp"] }]
+  });
+  if (result.canceled || !result.filePaths?.[0]) return null;
+  currentConfig = { ...currentConfig, backgroundImage: result.filePaths[0], desktopBackground: "image" };
+  writeConfig(currentConfig);
+  return currentConfig;
+});
+
+// ---- live media feed
+
+ipcMain.handle("feed:start", (_event, relPath) => {
+  try {
+    const { abs } = resolveVirtual(currentConfig.archiveSources, relPath || "");
+    const stat = fs.statSync(abs);
+    if (!stat.isFile()) return { ok: false, error: "not a file" };
+    const kind = kindOf(path.extname(abs).slice(1));
+    if (kind !== "video" && kind !== "audio") {
+      return { ok: false, error: "only video or audio can be broadcast" };
+    }
+    lan.setBroadcast({
+      path: String(relPath).replace(/\\/g, "/"),
+      name: path.basename(abs),
+      kind,
+      startedAt: Date.now()
+    });
+    sendToRenderer("lan:state", lan.getState());
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err.message || err) };
+  }
+});
+
+ipcMain.handle("feed:stop", () => {
+  lan.setBroadcast(null);
+  sendToRenderer("lan:state", lan.getState());
+  return { ok: true };
+});
+
 ipcMain.handle("lan:getState", () => lan.getState());
 
 ipcMain.handle("lan:setSharing", async (_event, enabled) => {
@@ -295,6 +512,11 @@ ipcMain.handle("window:maximize", () => {
   else mainWindow.maximize();
 });
 ipcMain.handle("window:close", () => {
+  if (currentConfig.runInTray) {
+    mainWindow?.hide();
+    notifyWindows("Doomsday Archive", "Still transmitting from the tray. The vault stays open.");
+    return;
+  }
   isQuitting = true;
   mainWindow?.close();
 });
@@ -302,8 +524,36 @@ ipcMain.handle("window:close", () => {
 // ------------------------------------------------------------------ lifecycle
 
 app.whenReady().then(async () => {
+  protocol.handle("vault", (request) => {
+    try {
+      const url = new URL(request.url);
+      const rel = `${url.hostname}${decodeURIComponent(url.pathname)}`;
+      const { abs } = resolveVirtual(currentConfig.archiveSources, rel);
+      return serveVaultFile(request, abs);
+    } catch (err) {
+      return new Response(String(err.message || err), { status: 400 });
+    }
+  });
+
+  protocol.handle("dabg", (request) => {
+    try {
+      if (!currentConfig.backgroundImage || !fs.existsSync(currentConfig.backgroundImage)) {
+        return new Response("no backdrop", { status: 404 });
+      }
+      return serveVaultFile(request, currentConfig.backgroundImage);
+    } catch (err) {
+      return new Response(String(err.message || err), { status: 400 });
+    }
+  });
+
   createMainWindow();
   discovery.start();
+  if (currentConfig.runInTray) createTray();
+  try {
+    app.setLoginItemSettings({ openAtLogin: Boolean(currentConfig.startWithPc) });
+  } catch {
+    // unsupported environment
+  }
   if (currentConfig.sharingEnabled) {
     await lan.start(currentConfig.port);
   }
@@ -316,15 +566,18 @@ app.whenReady().then(async () => {
 });
 
 app.on("second-instance", () => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
+  wakeWindow();
+});
+
+app.on("before-quit", () => {
+  isQuitting = true;
 });
 
 app.on("window-all-closed", () => {
+  if (currentConfig.runInTray && !isQuitting) return;
   isQuitting = true;
   discovery.stop();
+  destroyTray();
   app.quit();
 });
 

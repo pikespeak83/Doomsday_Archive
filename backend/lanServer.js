@@ -4,6 +4,7 @@ const os = require("os");
 const crypto = require("crypto");
 const express = require("express");
 const { listVirtual, resolveVirtual, sourceStats } = require("./archiveStore");
+const { verifyPassword } = require("./passwordStore");
 
 /**
  * LAN uplink server.
@@ -18,6 +19,9 @@ const { listVirtual, resolveVirtual, sourceStats } = require("./archiveStore");
 function createLanServer({ getConfig, saveDevices, onEvent }) {
   let server = null;
   let currentPort = null;
+
+  /** Active live feed: { path, name, kind, startedAt } or null. */
+  let broadcast = null;
 
   /** deviceId -> { id, name, requestedAt, remote } */
   const pending = new Map();
@@ -91,7 +95,8 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
         service: "doomsday-archive",
         sharing: Boolean(server),
         sources: (cfg.archiveSources || []).length,
-        allowDownloads: cfg.allowDownloads !== false
+        allowDownloads: cfg.allowDownloads !== false,
+        passwordRequired: Boolean(cfg.passwordHash)
       });
     });
 
@@ -100,6 +105,10 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
       const name = String(req.body?.name || "").trim().slice(0, 40);
       if (!/^[a-f0-9-]{8,64}$/i.test(deviceId) || !name) {
         return res.status(400).json({ error: "bad request" });
+      }
+      const cfg = getConfig();
+      if (cfg.passwordHash && !verifyPassword(req.body?.password, cfg.passwordHash, cfg.passwordSalt)) {
+        return res.status(403).json({ status: "unauthorized", error: "invalid passphrase" });
       }
       const existing = findApproved(deviceId);
       if (existing) {
@@ -138,6 +147,7 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
     // Everything below requires an approved token.
     app.use("/api/files", requireToken);
     app.use("/api/download", requireToken);
+    app.use("/api/broadcast", requireToken);
 
     function requireToken(req, res, next) {
       const token =
@@ -184,6 +194,18 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
       } catch (err) {
         res.status(400).json({ error: String(err.message || err) });
       }
+    });
+
+    app.get("/api/broadcast/state", (_req, res) => {
+      if (!broadcast) return res.json({ active: false, serverNow: Date.now() });
+      res.json({
+        active: true,
+        path: broadcast.path,
+        name: broadcast.name,
+        kind: broadcast.kind,
+        startedAt: broadcast.startedAt,
+        serverNow: Date.now()
+      });
     });
 
     app.use((_req, res) => res.status(404).json({ error: "not found" }));
@@ -267,6 +289,15 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
     emit("device-revoked", { deviceId });
   }
 
+  function setBroadcast(next) {
+    broadcast = next;
+    emit("broadcast", { active: Boolean(next), name: next?.name || null });
+  }
+
+  function getBroadcast() {
+    return broadcast;
+  }
+
   function getState() {
     const cfg = getConfig();
     return {
@@ -277,11 +308,14 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
       approved: approvedList().map(({ token, ...rest }) => rest),
       archiveSources: cfg.archiveSources || [],
       sourceStats: sourceStats(cfg.archiveSources),
-      allowDownloads: cfg.allowDownloads !== false
+      allowDownloads: cfg.allowDownloads !== false,
+      broadcast: broadcast
+        ? { active: true, name: broadcast.name, path: broadcast.path, kind: broadcast.kind, startedAt: broadcast.startedAt }
+        : { active: false }
     };
   }
 
-  return { start, stop, approve, deny, revoke, getState, interfaces };
+  return { start, stop, approve, deny, revoke, getState, interfaces, setBroadcast, getBroadcast };
 }
 
 module.exports = { createLanServer };

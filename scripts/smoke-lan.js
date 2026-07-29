@@ -1,11 +1,15 @@
 // Temporary smoke test for the LAN server (run: node scripts/smoke-lan.js)
 const { createLanServer } = require("../backend/lanServer");
+const { hashPassword } = require("../backend/passwordStore");
 
+const secret = hashPassword("test-pass-123");
 const config = {
   approvedDevices: [],
   archiveSources: [{ id: "src0", path: process.cwd(), label: "PROJECT" }],
   port: 8737,
-  allowDownloads: true
+  allowDownloads: true,
+  passwordHash: secret.hash,
+  passwordSalt: secret.salt
 };
 
 const srv = createLanServer({
@@ -22,10 +26,17 @@ srv.start(8737).then(async (state) => {
   console.log("portal ok:", portal.includes("DOOMSDAY ARCHIVE"));
 
   const deviceId = "aaaabbbb-1111-2222-3333-444455556666";
+  const badPass = await fetch("http://127.0.0.1:8737/api/access/request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deviceId, name: "TEST-DEVICE", password: "wrong" })
+  });
+  console.log("bad passphrase status", badPass.status, (await badPass.json()).status);
+
   const req = await fetch("http://127.0.0.1:8737/api/access/request", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ deviceId, name: "TEST-DEVICE" })
+    body: JSON.stringify({ deviceId, name: "TEST-DEVICE", password: "test-pass-123" })
   }).then((r) => r.json());
   console.log("request", JSON.stringify(req));
 
@@ -58,6 +69,13 @@ srv.start(8737).then(async (state) => {
 
   const dl = await fetch(`http://127.0.0.1:8737/api/download?path=src0%2Fpackage.json&token=${dev.token}`);
   console.log("download status", dl.status, "disposition:", dl.headers.get("content-disposition"));
+
+  srv.setBroadcast({ active: true, path: "src0/fake.mp4", name: "fake.mp4", kind: "video", startedAt: Date.now() });
+  const feed = await fetch(`http://127.0.0.1:8737/api/broadcast/state?token=${dev.token}`).then((r) => r.json());
+  console.log("broadcast active:", feed.active, "kind:", feed.kind, "serverNow:", typeof feed.serverNow);
+  srv.setBroadcast(null);
+  const feedOff = await fetch(`http://127.0.0.1:8737/api/broadcast/state?token=${dev.token}`).then((r) => r.json());
+  console.log("broadcast off:", feedOff.active === false);
 
   srv.revoke(deviceId);
   const revoked = await fetch("http://127.0.0.1:8737/api/files?path=", {

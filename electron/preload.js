@@ -14,6 +14,22 @@ contextBridge.exposeInMainWorld("archiveApi", {
   getArchiveStats: () => ipcRenderer.invoke("archive:stats"),
   openFile: (relPath) => ipcRenderer.invoke("archive:openFile", relPath),
 
+  vaultMkdir: (parentRel, name) => ipcRenderer.invoke("vault:mkdir", parentRel, name),
+  vaultNewFile: (parentRel, name) => ipcRenderer.invoke("vault:newFile", parentRel, name),
+  vaultRename: (relPath, newName) => ipcRenderer.invoke("vault:rename", relPath, newName),
+  vaultMove: (fromRel, toDirRel) => ipcRenderer.invoke("vault:move", fromRel, toDirRel),
+  vaultDelete: (relPath) => ipcRenderer.invoke("vault:delete", relPath),
+
+  getSecurityState: () => ipcRenderer.invoke("security:getState"),
+  unlockVault: (password) => ipcRenderer.invoke("security:unlock", password),
+  setVaultPassword: (currentPassword, newPassword) =>
+    ipcRenderer.invoke("security:setPassword", currentPassword, newPassword),
+  clearVaultPassword: (currentPassword) => ipcRenderer.invoke("security:clearPassword", currentPassword),
+
+  pickBackgroundImage: () => ipcRenderer.invoke("settings:pickBackgroundImage"),
+  startFeed: (relPath) => ipcRenderer.invoke("feed:start", relPath),
+  stopFeed: () => ipcRenderer.invoke("feed:stop"),
+
   getLanState: () => ipcRenderer.invoke("lan:getState"),
   setSharing: (enabled) => ipcRenderer.invoke("lan:setSharing", enabled),
   restartLan: () => ipcRenderer.invoke("lan:restart"),

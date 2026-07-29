@@ -13,8 +13,11 @@ import RemoteArchiveApp from "./apps/RemoteArchiveApp.jsx";
 import FieldUplinkApp from "./apps/FieldUplinkApp.jsx";
 import FieldSettingsApp from "./apps/FieldSettingsApp.jsx";
 import FieldHelpApp from "./apps/FieldHelpApp.jsx";
+import FieldLiveFeed from "./FieldLiveFeed.jsx";
+import MediaViewer from "../components/MediaViewer.jsx";
+import TaskBar from "../components/TaskBar.jsx";
 import { playSound, setSoundsEnabled } from "../lib/sounds.js";
-import { baseUrl, listFiles, requestAccess, accessState } from "./api.js";
+import { baseUrl, listFiles, requestAccess, accessState, hostInfo, broadcastState, downloadUrl } from "./api.js";
 
 const FIELD_BOOT_LINES = [
   "DCI FIELD TERMINAL v1.0.0 :: SECURE KERNEL LOADED",
@@ -32,6 +35,7 @@ const APPS = [
 ];
 
 let toastId = 0;
+let windowKey = 0;
 
 /**
  * Field terminal state machine:
@@ -44,12 +48,16 @@ export default function FieldApp() {
   const [hosts, setHosts] = useState([]);
   const [scanning, setScanning] = useState(false);
   const [manualAddress, setManualAddress] = useState("");
+  const [passphrase, setPassphrase] = useState("");
+  const [needsPassphrase, setNeedsPassphrase] = useState(false);
   const [connectError, setConnectError] = useState("");
   const [connection, setConnection] = useState(null); // { address, port, hostName }
-  const [openApps, setOpenApps] = useState([]);
+  const [windows, setWindows] = useState([]); // { key, type, appId, media, feed, title, width, minimized }
   const [toasts, setToasts] = useState([]);
   const [shuttingDown, setShuttingDown] = useState(false);
   const pollRef = useRef(null);
+  const feedPollRef = useRef(null);
+  const feedKeyRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -88,8 +96,46 @@ export default function FieldApp() {
       offDownload();
       offUpdate();
       clearInterval(pollRef.current);
+      clearInterval(feedPollRef.current);
     };
   }, []);
+
+  // live feed auto-join: poll while linked
+  useEffect(() => {
+    clearInterval(feedPollRef.current);
+    if (phase !== "desktop" || !connection) return;
+    const base = baseUrl(connection.address, connection.port);
+    let lastActivePath = null;
+    const poll = async () => {
+      try {
+        const res = await broadcastState(base, config.token);
+        if (!res.ok) return;
+        const state = res.json;
+        if (state.active && state.path !== lastActivePath) {
+          lastActivePath = state.path;
+          const clockOffset = state.serverNow - Date.now();
+          playSound("alert", 0.5);
+          pushToast(`LIVE FEED FROM HOST: ${state.name}`);
+          openFeedWindow({
+            src: downloadUrl(base, config.token, state.path, true),
+            kind: state.kind,
+            name: state.name,
+            startedAt: state.startedAt,
+            clockOffset
+          });
+        } else if (!state.active && lastActivePath) {
+          lastActivePath = null;
+          closeFeedWindow();
+          pushToast("LIVE FEED ENDED BY HOST");
+        }
+      } catch {
+        // host unreachable; uplink app handles that
+      }
+    };
+    void poll();
+    feedPollRef.current = setInterval(poll, 4000);
+    return () => clearInterval(feedPollRef.current);
+  }, [phase, connection?.address, config?.token]);
 
   // after boot, try the saved link first, else scan
   useEffect(() => {
@@ -146,7 +192,26 @@ export default function FieldApp() {
   async function beginRequest(address, port, hostName) {
     const base = baseUrl(address, port);
     try {
-      const result = await requestAccess(base, config.deviceId, config.deviceName || sysInfo.hostname);
+      // does this node demand a passphrase?
+      try {
+        const info = await hostInfo(base);
+        if (info.ok && info.json.passwordRequired && !passphrase) {
+          setNeedsPassphrase(true);
+          setConnectError("THIS NODE DEMANDS A PASSPHRASE. ENTER IT BELOW.");
+          setPhase("connect");
+          return;
+        }
+      } catch {
+        // older host without host-info; proceed
+      }
+      const result = await requestAccess(base, config.deviceId, config.deviceName || sysInfo.hostname, passphrase);
+      if (result.status === "unauthorized") {
+        setNeedsPassphrase(true);
+        playSound("error", 0.5);
+        setConnectError("INVALID PASSPHRASE.");
+        setPhase("connect");
+        return;
+      }
       const next = await window.fieldApi.saveConfig({ hostAddress: address, hostPort: port, hostName: hostName || address });
       setConfig(next);
       if (result.status === "approved" && result.token) {
@@ -190,20 +255,74 @@ export default function FieldApp() {
 
   async function disconnect() {
     clearInterval(pollRef.current);
+    clearInterval(feedPollRef.current);
     const next = await window.fieldApi.saveConfig({ token: "", hostAddress: "", hostName: "" });
     setConfig(next);
     setConnection(null);
-    setOpenApps([]);
+    setWindows([]);
     setPhase("connect");
   }
 
-  function openApp(id) {
+  function openApp(appId) {
     playSound("click", 0.4);
-    setOpenApps((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setWindows((prev) => {
+      const existing = prev.find((w) => w.appId === appId);
+      if (existing) {
+        return prev.map((w) => (w.key === existing.key ? { ...w, minimized: false } : w));
+      }
+      const meta = APPS.find((a) => a.id === appId);
+      return [...prev, {
+        key: `app-${++windowKey}`,
+        type: "app",
+        appId,
+        title: `DCI // ${meta.label.toUpperCase()}`,
+        width: meta.width,
+        minimized: false
+      }];
+    });
   }
 
-  function closeApp(id) {
-    setOpenApps((prev) => prev.filter((a) => a !== id));
+  function openMedia(media) {
+    playSound("open", 0.4);
+    setWindows((prev) => [...prev, {
+      key: `media-${++windowKey}`,
+      type: "media",
+      media,
+      title: `${media.kind.toUpperCase()} // ${media.name.toUpperCase().slice(0, 34)}`,
+      width: media.kind === "audio" ? 420 : media.kind === "text" ? 560 : 640,
+      minimized: false
+    }]);
+  }
+
+  function openFeedWindow(feed) {
+    setWindows((prev) => {
+      const without = prev.filter((w) => w.type !== "feed");
+      const key = `feed-${++windowKey}`;
+      feedKeyRef.current = key;
+      return [...without, {
+        key,
+        type: "feed",
+        feed,
+        title: `LIVE FEED // ${feed.name.toUpperCase().slice(0, 30)}`,
+        width: feed.kind === "audio" ? 440 : 660,
+        minimized: false
+      }];
+    });
+  }
+
+  function closeFeedWindow() {
+    setWindows((prev) => prev.filter((w) => w.type !== "feed"));
+    feedKeyRef.current = null;
+  }
+
+  function closeWindow(key) {
+    setWindows((prev) => prev.filter((w) => w.key !== key));
+  }
+
+  function toggleMinimize(key, value) {
+    setWindows((prev) =>
+      prev.map((w) => (w.key === key ? { ...w, minimized: value ?? !w.minimized } : w))
+    );
   }
 
   function shutdown() {
@@ -312,6 +431,18 @@ export default function FieldApp() {
                     />
                     <button className="btn" onClick={connectManual}>LINK</button>
                   </div>
+                  {needsPassphrase && (
+                    <>
+                      <div className="field-label">HOST PASSPHRASE</div>
+                      <input
+                        className="text-input"
+                        type="password"
+                        value={passphrase}
+                        placeholder="required by this node"
+                        onChange={(e) => setPassphrase(e.target.value)}
+                      />
+                    </>
+                  )}
                   {connectError && (
                     <p className="warn" style={{ marginTop: 10, fontSize: 13 }}>{connectError}</p>
                   )}
@@ -373,7 +504,7 @@ export default function FieldApp() {
             items={APPS.map((app) => ({
               id: app.id,
               label: app.label,
-              active: openApps.includes(app.id)
+              active: windows.some((w) => w.appId === app.id && !w.minimized)
             }))}
             onSelect={openApp}
           />
@@ -387,30 +518,52 @@ export default function FieldApp() {
             ))}
           </div>
 
-          {openApps.map((id, index) => {
-            const meta = APPS.find((a) => a.id === id);
-            const initial = { x: 90 + index * 36, y: 48 + index * 30 };
+          {windows.map((win, index) => {
+            const initial = { x: 90 + (index % 8) * 36, y: 48 + (index % 8) * 30 };
             return (
               <WindowFrame
-                key={id}
-                title={`DCI // ${meta.label.toUpperCase()}`}
-                width={meta.width}
+                key={win.key}
+                title={win.title}
+                width={win.width}
                 initial={initial}
-                onClose={() => closeApp(id)}
+                minimized={win.minimized}
+                onMinimize={() => toggleMinimize(win.key, true)}
+                onClose={() => closeWindow(win.key)}
               >
-                {id === "archive" && (
-                  <RemoteArchiveApp connection={connection} config={config} onAuthLost={disconnect} />
+                {win.type === "media" && <MediaViewer media={win.media} />}
+                {win.type === "feed" && (
+                  <FieldLiveFeed
+                    src={win.feed.src}
+                    kind={win.feed.kind}
+                    name={win.feed.name}
+                    startedAt={win.feed.startedAt}
+                    clockOffset={win.feed.clockOffset}
+                  />
                 )}
-                {id === "uplink" && (
+                {win.appId === "archive" && (
+                  <RemoteArchiveApp
+                    connection={connection}
+                    config={config}
+                    onAuthLost={disconnect}
+                    onOpenMedia={openMedia}
+                  />
+                )}
+                {win.appId === "uplink" && (
                   <FieldUplinkApp connection={connection} onDisconnect={disconnect} />
                 )}
-                {id === "settings" && (
+                {win.appId === "settings" && (
                   <FieldSettingsApp config={config} onConfigChange={setConfig} />
                 )}
-                {id === "help" && <FieldHelpApp sysInfo={sysInfo} connection={connection} />}
+                {win.appId === "help" && <FieldHelpApp sysInfo={sysInfo} connection={connection} />}
               </WindowFrame>
             );
           })}
+
+          <TaskBar
+            windows={windows}
+            onToggle={(key) => toggleMinimize(key)}
+            onClose={closeWindow}
+          />
         </div>
       )}
 

@@ -442,6 +442,154 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ------------------------------------------------ context menu */
+.ctx-menu {
+  position: fixed;
+  z-index: 940;
+  min-width: 200px;
+  background: rgba(5, 14, 3, 0.97);
+  border: 1px solid var(--green-dim);
+  box-shadow: 0 0 24px rgba(30, 90, 8, 0.5);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.ctx-item {
+  background: transparent;
+  border: 0;
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-align: left;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.ctx-item:hover { background: var(--green-dark); color: var(--green-bright); }
+.ctx-item:disabled { opacity: 0.35; cursor: default; }
+.ctx-item.danger { color: var(--red); }
+.ctx-item.danger:hover { background: #401008; }
+.ctx-divider { border-top: 1px dashed var(--green-faint); margin: 4px 6px; }
+
+.drop-target { outline: 1px dashed var(--green); background: rgba(125, 255, 63, 0.1); }
+
+/* ------------------------------------------------ taskbar */
+.taskbar {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  z-index: 60;
+  max-width: 90vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.task-chip {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--green-dim);
+  background: rgba(8, 20, 5, 0.9);
+}
+.task-chip.min { opacity: 0.62; border-style: dashed; }
+.task-label {
+  background: transparent;
+  border: 0;
+  color: var(--green-bright);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 5px 10px;
+  cursor: pointer;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-label:hover { background: var(--green-dark); }
+.task-x {
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--green-faint);
+  color: var(--green-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.task-x:hover { color: var(--red); background: #401008; }
+
+/* ------------------------------------------------ media viewers */
+.viewer-stage {
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+}
+.viewer-stage.dark { background: #000; border: 1px solid var(--green-faint); }
+.viewer-img {
+  max-width: 100%;
+  max-height: 58vh;
+  border: 1px solid var(--green-faint);
+  image-rendering: auto;
+}
+.viewer-video { width: 100%; max-height: 58vh; outline: none; }
+.viewer-audio { padding: 6px 2px; }
+.viewer-text {
+  background: #010502;
+  border: 1px solid var(--green-faint);
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 10px;
+  max-height: 56vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+/* ------------------------------------------------ lock screen */
+.lock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 930;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+}
+.lock-screen > *:not(.boot-glitch) { position: relative; z-index: 2; }
+.lock-seal {
+  width: 170px;
+  height: 170px;
+  filter: drop-shadow(0 0 18px rgba(125, 255, 63, 0.35));
+}
+.lock-panel { width: min(420px, calc(100vw - 60px)); }
+.shake { animation: lockShake 0.4s linear; }
+@keyframes lockShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-7px); }
+  50% { transform: translateX(6px); }
+  75% { transform: translateX(-4px); }
+}
+
+/* ------------------------------------------------ custom backdrop */
+.desktop-image {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0.5;
+  filter: saturate(0.7) brightness(0.75);
+  pointer-events: none;
+}
+.btn.ghost { border-color: var(--green-faint); color: var(--green-dim); background: transparent; }
+.btn.ghost:hover { border-color: var(--green); color: var(--green); background: var(--green-dark); }
+
 /* ------------------------------------------------ field terminal connect */
 .connect-wrap {
   position: absolute;

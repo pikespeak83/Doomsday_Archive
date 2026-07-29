@@ -141,6 +141,152 @@ export default function SettingsApp({ config, onConfigChange }) {
           return save({ uiSoundsEnabled: value });
         }}
       />
+      <Toggle
+        label="RUN IN TRAY ON CLOSE"
+        checked={config.runInTray === true}
+        onChange={(value) => save({ runInTray: value })}
+      />
+      <Toggle
+        label="START WITH PC"
+        checked={config.startWithPc === true}
+        onChange={(value) => save({ startWithPc: value })}
+      />
+      <Toggle
+        label="PC NOTIFICATIONS"
+        checked={config.notificationsEnabled !== false}
+        onChange={(value) => save({ notificationsEnabled: value })}
+      />
+
+      <hr className="hr" />
+      <div className="field-label">DESKTOP BACKDROP</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {[
+          ["map", "WORLD MAP"],
+          ["terminal", "FAULTY TERMINAL"],
+          ["glitch", "LETTER GLITCH"],
+          ["none", "PLAIN"]
+        ].map(([value, label]) => (
+          <button
+            key={value}
+            className={`btn small ${config.desktopBackground === value || (!config.desktopBackground && value === "map") ? "" : "ghost"}`}
+            onClick={() => {
+              playSound("toggle", 0.4);
+              void save({ desktopBackground: value });
+            }}
+          >
+            {label}
+          </button>
+        ))}
+        <button
+          className={`btn small ${config.desktopBackground === "image" ? "" : "ghost"}`}
+          onClick={async () => {
+            playSound("click", 0.4);
+            const next = await window.archiveApi.pickBackgroundImage();
+            if (next) onConfigChange(next);
+          }}
+        >
+          CUSTOM IMAGE...
+        </button>
+      </div>
+      {config.desktopBackground === "image" && config.backgroundImage && (
+        <p className="dim" style={{ fontSize: 12, marginTop: 6, wordBreak: "break-all" }}>
+          {config.backgroundImage}
+        </p>
+      )}
+
+      <hr className="hr" />
+      <div className="field-label">VAULT PASSPHRASE</div>
+      <PasswordSection config={config} onConfigChange={onConfigChange} />
+
+      <hr className="hr" />
+      <div className="field-label">STYLES</div>
+      <p className="dim" style={{ fontSize: 13 }}>
+        ALTERNATE TERMINAL STYLES :: <span className="bright">COMING SOON</span>
+      </p>
+    </div>
+  );
+}
+
+function PasswordSection({ config, onConfigChange }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [message, setMessage] = useState(null); // { text, warn }
+  const passwordSet = Boolean(config.passwordHash);
+
+  async function refreshConfig() {
+    const cfg = await window.archiveApi.getConfig();
+    onConfigChange(cfg);
+  }
+
+  async function apply() {
+    const result = await window.archiveApi.setVaultPassword(current, next);
+    if (result.ok) {
+      playSound("confirm", 0.5);
+      setMessage({ text: "PASSPHRASE SET. IT NOW GUARDS THIS TERMINAL AND ALL CONNECTORS." });
+      setCurrent("");
+      setNext("");
+      await refreshConfig();
+    } else {
+      playSound("error", 0.45);
+      setMessage({ text: result.error.toUpperCase(), warn: true });
+    }
+  }
+
+  async function clear() {
+    const result = await window.archiveApi.clearVaultPassword(current);
+    if (result.ok) {
+      playSound("confirm", 0.5);
+      setMessage({ text: "PASSPHRASE REMOVED." });
+      setCurrent("");
+      setNext("");
+      await refreshConfig();
+    } else {
+      playSound("error", 0.45);
+      setMessage({ text: result.error.toUpperCase(), warn: true });
+    }
+  }
+
+  return (
+    <div>
+      <p className="dim" style={{ fontSize: 12, marginBottom: 8 }}>
+        {passwordSet
+          ? "A passphrase is SET. The host must enter it on launch; connectors must send it with access requests."
+          : "No passphrase. Anyone on the wire can request access and this terminal opens without a lock."}
+      </p>
+      {passwordSet && (
+        <>
+          <div className="field-label">CURRENT PASSPHRASE</div>
+          <input
+            className="text-input"
+            type="password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+          />
+        </>
+      )}
+      <div className="field-label">{passwordSet ? "NEW PASSPHRASE" : "SET PASSPHRASE"}</div>
+      <input
+        className="text-input"
+        type="password"
+        value={next}
+        placeholder="at least 4 characters"
+        onChange={(e) => setNext(e.target.value)}
+      />
+      <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+        <button className="btn small" onClick={apply} disabled={!next}>
+          {passwordSet ? "CHANGE PASSPHRASE" : "SET PASSPHRASE"}
+        </button>
+        {passwordSet && (
+          <button className="btn small danger" onClick={clear}>
+            REMOVE PASSPHRASE
+          </button>
+        )}
+      </div>
+      {message && (
+        <p className={message.warn ? "warn" : "bright"} style={{ fontSize: 12, marginTop: 8 }}>
+          {message.text}
+        </p>
+      )}
     </div>
   );
 }

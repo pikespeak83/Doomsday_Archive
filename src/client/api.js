@@ -20,11 +20,11 @@ export function hostInfo(base) {
   return getJson(`${base}/api/host-info`);
 }
 
-export function requestAccess(base, deviceId, name) {
+export function requestAccess(base, deviceId, name, password) {
   return fetch(`${base}/api/access/request`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ deviceId, name })
+    body: JSON.stringify({ deviceId, name, password: password || "" })
   }).then((r) => r.json());
 }
 
@@ -38,4 +38,8 @@ export function listFiles(base, token, path) {
 
 export function downloadUrl(base, token, path, inline = false) {
   return `${base}/api/download?path=${encodeURIComponent(path)}&token=${encodeURIComponent(token)}${inline ? "&inline=1" : ""}`;
+}
+
+export function broadcastState(base, token) {
+  return getJson(`${base}/api/broadcast/state`, token);
 }

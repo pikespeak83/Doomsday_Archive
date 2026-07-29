@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import ContextMenu from "../ContextMenu.jsx";
 import { playSound } from "../../lib/sounds.js";
 
 export function fmtSize(bytes) {
@@ -11,13 +12,20 @@ export function fmtSize(bytes) {
   return `${(mb / 1024).toFixed(2)} GB`;
 }
 
+const VIEWABLE = ["image", "video", "audio", "text"];
+
 /**
- * Host-side vault browser. The top level lists every linked source
- * (whole drives or folders); everything under a drive is reachable.
+ * Host vault browser: full drives, Windows-style right-click menu,
+ * cut/paste + drag moving, inline viewers, live feed broadcast.
  */
-export default function ArchiveApp({ sources, onOpenSettings }) {
+export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBroadcast, notify }) {
   const [listing, setListing] = useState({ path: "", entries: [] });
   const [error, setError] = useState("");
+  const [menu, setMenu] = useState(null); // { x, y, entry|null }
+  const [clipboard, setClipboard] = useState(null); // { rel, name }
+  const [renaming, setRenaming] = useState(null); // { rel, name, draft }
+  const [creating, setCreating] = useState(null); // { type: "dir"|"file", draft }
+  const [dragOver, setDragOver] = useState("");
 
   async function load(rel) {
     const result = await window.archiveApi.browse(rel);
@@ -32,6 +40,119 @@ export default function ArchiveApp({ sources, onOpenSettings }) {
     if (sources?.length) void load(listing.path || "");
   }, [sources?.length]);
 
+  const inFolder = Boolean(listing.path);
+  const crumbs = listing.path ? listing.path.split("/") : [];
+  const labelFor = (segment, index) => {
+    if (index === 0) {
+      const source = sources.find((s) => s.id === segment);
+      if (source) return source.label || source.path;
+    }
+    return segment;
+  };
+
+  function relOf(entry) {
+    return entry.type === "drive"
+      ? entry.id
+      : (listing.path ? `${listing.path}/` : "") + entry.name;
+  }
+
+  function openEntry(entry) {
+    const rel = relOf(entry);
+    if (entry.type !== "file") {
+      playSound("click", 0.35);
+      void load(rel);
+      return;
+    }
+    if (VIEWABLE.includes(entry.kind)) {
+      onOpenMedia({
+        kind: entry.kind,
+        name: entry.name,
+        src: `vault://${rel.split("/").map(encodeURIComponent).join("/")}`
+      });
+    } else {
+      void window.archiveApi.openFile(rel);
+    }
+  }
+
+  async function doOp(promise, refresh = true) {
+    const result = await promise;
+    if (!result.ok) {
+      playSound("error", 0.4);
+      notify?.(`VAULT ERROR: ${result.error}`, true);
+    } else if (refresh) {
+      void load(listing.path);
+    }
+    return result.ok;
+  }
+
+  async function pasteInto(destRel) {
+    if (!clipboard) return;
+    const moved = await doOp(window.archiveApi.vaultMove(clipboard.rel, destRel));
+    if (moved) {
+      notify?.(`MOVED: ${clipboard.name}`);
+      setClipboard(null);
+    }
+  }
+
+  function entryMenu(entry) {
+    const rel = relOf(entry);
+    const items = [];
+    items.push({ label: entry.type === "file" ? "OPEN" : "EXPLORE", onClick: () => openEntry(entry) });
+    if (entry.type === "file" && VIEWABLE.includes(entry.kind)) {
+      items.push({ label: "OPEN WITH SYSTEM APP", onClick: () => window.archiveApi.openFile(rel) });
+    }
+    if (entry.type === "file" && (entry.kind === "video" || entry.kind === "audio")) {
+      items.push({ label: "BROADCAST LIVE FEED", onClick: () => onBroadcast(rel, entry.name) });
+    }
+    if (entry.type !== "drive") {
+      items.push({ divider: true });
+      items.push({
+        label: "CUT (MOVE)",
+        onClick: () => {
+          setClipboard({ rel, name: entry.name });
+          notify?.(`CUT: ${entry.name} (paste in a folder)`);
+        }
+      });
+      if (clipboard && entry.type === "dir") {
+        items.push({ label: `PASTE INTO ${entry.name}`, onClick: () => pasteInto(rel) });
+      }
+      items.push({
+        label: "RENAME",
+        onClick: () => setRenaming({ rel, name: entry.name, draft: entry.name })
+      });
+      items.push({ divider: true });
+      items.push({
+        label: "DELETE (RECYCLE BIN)",
+        danger: true,
+        onClick: () => doOp(window.archiveApi.vaultDelete(rel)).then((ok) => ok && notify?.(`RECYCLED: ${entry.name}`))
+      });
+    }
+    return items;
+  }
+
+  function backgroundMenu() {
+    return [
+      {
+        label: "NEW FOLDER",
+        disabled: !inFolder,
+        onClick: () => setCreating({ type: "dir", draft: "NEW FOLDER" })
+      },
+      {
+        label: "NEW FILE",
+        disabled: !inFolder,
+        onClick: () => setCreating({ type: "file", draft: "notes.txt" })
+      },
+      { divider: true },
+      {
+        label: clipboard ? `PASTE HERE (${clipboard.name})` : "PASTE",
+        disabled: !clipboard || !inFolder,
+        onClick: () => pasteInto(listing.path)
+      },
+      { divider: true },
+      { label: "REFRESH", onClick: () => load(listing.path) }
+    ];
+  }
+
   if (!sources?.length) {
     return (
       <div>
@@ -45,17 +166,13 @@ export default function ArchiveApp({ sources, onOpenSettings }) {
     );
   }
 
-  const crumbs = listing.path ? listing.path.split("/") : [];
-  const labelFor = (segment, index) => {
-    if (index === 0) {
-      const source = sources.find((s) => s.id === segment);
-      if (source) return source.label || source.path;
-    }
-    return segment;
-  };
-
   return (
-    <div>
+    <div
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenu({ x: e.clientX, y: e.clientY, entry: null });
+      }}
+    >
       <div style={{ marginBottom: 10 }}>
         <a
           href="#"
@@ -82,6 +199,11 @@ export default function ArchiveApp({ sources, onOpenSettings }) {
             </a>
           </React.Fragment>
         ))}
+        {clipboard && (
+          <span className="dim" style={{ marginLeft: 10, fontSize: 12 }}>
+            [ CUT: {clipboard.name} ]
+          </span>
+        )}
       </div>
       {error && <p className="warn">{error}</p>}
       <table className="data-table">
@@ -89,33 +211,104 @@ export default function ArchiveApp({ sources, onOpenSettings }) {
           <tr><th style={{ width: 52 }}></th><th>NAME</th><th>TYPE</th><th>SIZE</th></tr>
         </thead>
         <tbody>
+          {creating && (
+            <tr>
+              <td className="dim">{creating.type === "dir" ? "[DIR]" : "TXT"}</td>
+              <td colSpan={3}>
+                <input
+                  className="text-input"
+                  autoFocus
+                  value={creating.draft}
+                  onChange={(e) => setCreating({ ...creating, draft: e.target.value })}
+                  onKeyDown={async (e) => {
+                    if (e.key === "Escape") setCreating(null);
+                    if (e.key === "Enter") {
+                      const op = creating.type === "dir"
+                        ? window.archiveApi.vaultMkdir(listing.path, creating.draft)
+                        : window.archiveApi.vaultNewFile(listing.path, creating.draft);
+                      const ok = await doOp(op);
+                      if (ok) {
+                        playSound("confirm", 0.4);
+                        setCreating(null);
+                      }
+                    }
+                  }}
+                  onBlur={() => setCreating(null)}
+                />
+              </td>
+            </tr>
+          )}
           {listing.entries.map((entry) => {
-            const rel = entry.type === "drive"
-              ? entry.id
-              : (listing.path ? `${listing.path}/` : "") + entry.name;
+            const rel = relOf(entry);
+            const isRenaming = renaming?.rel === rel;
+            const droppable = entry.type !== "file";
             return (
               <tr
                 key={entry.id || entry.name}
-                className="click"
-                onDoubleClick={() => {
-                  playSound("select", 0.4);
-                  if (entry.type === "file") void window.archiveApi.openFile(rel);
-                  else void load(rel);
+                className={`click ${dragOver === rel ? "drop-target" : ""}`}
+                draggable={entry.type !== "drive" && !isRenaming}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("text/da-rel", rel);
+                  e.dataTransfer.setData("text/plain", entry.name);
                 }}
+                onDragOver={(e) => {
+                  if (droppable) {
+                    e.preventDefault();
+                    setDragOver(rel);
+                  }
+                }}
+                onDragLeave={() => setDragOver((prev) => (prev === rel ? "" : prev))}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  setDragOver("");
+                  const fromRel = e.dataTransfer.getData("text/da-rel");
+                  if (!fromRel || fromRel === rel) return;
+                  const ok = await doOp(window.archiveApi.vaultMove(fromRel, rel));
+                  if (ok) notify?.(`MOVED INTO ${entry.name}`);
+                }}
+                onDoubleClick={() => openEntry(entry)}
                 onClick={() => {
-                  if (entry.type !== "file") {
+                  if (entry.type !== "file" && !isRenaming) {
                     playSound("click", 0.35);
                     void load(rel);
                   }
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setMenu({ x: e.clientX, y: e.clientY, entry });
                 }}
               >
                 <td className="dim">
                   {entry.type === "drive" ? "[DRV]" : entry.type === "dir" ? "[DIR]" : (entry.kind || "file").toUpperCase().slice(0, 3)}
                 </td>
                 <td>
-                  {entry.name}
-                  {entry.type === "drive" && entry.online === false && (
-                    <span className="warn"> (OFFLINE)</span>
+                  {isRenaming ? (
+                    <input
+                      className="text-input"
+                      autoFocus
+                      value={renaming.draft}
+                      onChange={(e) => setRenaming({ ...renaming, draft: e.target.value })}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={async (e) => {
+                        if (e.key === "Escape") setRenaming(null);
+                        if (e.key === "Enter") {
+                          const ok = await doOp(window.archiveApi.vaultRename(rel, renaming.draft));
+                          if (ok) {
+                            playSound("confirm", 0.4);
+                            setRenaming(null);
+                          }
+                        }
+                      }}
+                      onBlur={() => setRenaming(null)}
+                    />
+                  ) : (
+                    <>
+                      {entry.name}
+                      {entry.type === "drive" && entry.online === false && (
+                        <span className="warn"> (OFFLINE)</span>
+                      )}
+                    </>
                   )}
                 </td>
                 <td className="dim">
@@ -125,14 +318,23 @@ export default function ArchiveApp({ sources, onOpenSettings }) {
               </tr>
             );
           })}
-          {!listing.entries.length && !error && (
+          {!listing.entries.length && !error && !creating && (
             <tr><td colSpan={4} className="dim">EMPTY SECTOR</td></tr>
           )}
         </tbody>
       </table>
       <p className="dim" style={{ marginTop: 10, fontSize: 12 }}>
-        Double-click a file to open it with the system default app.
+        Right-click for file operations. Drag entries onto folders to move them.
       </p>
+
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menu.entry ? entryMenu(menu.entry) : backgroundMenu()}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
   );
 }
