@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Government Archival System</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: url('Red_Grid_Map.jpg') no-repeat center center fixed;
+            background-size: cover;
+            font-family: Arial, sans-serif;
+            color: #00FF00;
+            text-shadow: 0 0 10px #00FF00;
+        }
+        .container {
+            display: flex;
+            padding: 20px;
+        }
+        .document-list {
+            width: 70%;
+        }
+        .document {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            margin-bottom: 10px;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        .preview {
+            width: 30%;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            height: 100vh;
+        }
+        .logo {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            width: 100px;
+        }
+    </style>
+</head>
+<body>
+    <img src="Division_Logo_2.png" class="logo" alt="Division Logo 2">
+    <div class="container">
+        <div class="document-list">
+            <div class="document">Document 1</div>
+            <div class="document">Document 2</div>
+            <div class="document">Document 3</div>
+            <div class="document">Document 4</div>
+            <div class="document">Document 5</div>
+            <div class="document">Document 6</div>
+            <div class="document">Document 7</div>
+        </div>
+        <div class="preview">Document Preview Area</div>
+    </div>
+</body>
+</html>
