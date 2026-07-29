@@ -6,6 +6,10 @@
   font-family: "Share Tech Mono";
   src: url("/assets/fonts/ShareTechMono-Regular.ttf") format("truetype");
 }
+@font-face {
+  font-family: "Medusa Gothic";
+  src: url("/assets/fonts/MedusaGothic.otf") format("opentype");
+}
 
 :root {
   --green: #7dff3f;
@@ -55,6 +59,51 @@
   --folder-back-a: #f26a56;
   --folder-back-b: #a52c1e;
   --folder-edge: #4d0e07;
+}
+.os-root.theme-mono {
+  --green: #d9e8dc;
+  --green-bright: #ffffff;
+  --green-dim: #6b756d;
+  --green-faint: rgba(140, 152, 143, 0.35);
+  --green-dark: #1d211e;
+  --bg: #040504;
+  --panel: rgba(12, 14, 12, 0.92);
+  --red: #ff5f4f;
+  --folder-face-a: #e8f0ea;
+  --folder-face-b: #9aa79e;
+  --folder-back-a: #c2cfc6;
+  --folder-back-b: #6b756d;
+  --folder-edge: #2e332f;
+}
+.os-root.theme-cobalt {
+  --green: #3fa9ff;
+  --green-bright: #8fd0ff;
+  --green-dim: #1f5f9e;
+  --green-faint: rgba(31, 95, 158, 0.35);
+  --green-dark: #061a30;
+  --bg: #010610;
+  --panel: rgba(4, 12, 24, 0.92);
+  --red: #ff5f4f;
+  --folder-face-a: #8fd0ff;
+  --folder-face-b: #2277cc;
+  --folder-back-a: #5cb0f0;
+  --folder-back-b: #1f5f9e;
+  --folder-edge: #0a2c4d;
+}
+.os-root.theme-gold {
+  --green: #ffd23f;
+  --green-bright: #ffe58a;
+  --green-dim: #9e7d18;
+  --green-faint: rgba(158, 125, 24, 0.35);
+  --green-dark: #2b1f05;
+  --bg: #080601;
+  --panel: rgba(24, 18, 3, 0.92);
+  --red: #ff5f4f;
+  --folder-face-a: #ffe58a;
+  --folder-face-b: #d9a81f;
+  --folder-back-a: #f0c64d;
+  --folder-back-b: #9e7d18;
+  --folder-edge: #4d3a07;
 }
 
 /* Cerberus seal image: circular crop of the emblem art. */
@@ -1207,4 +1256,14 @@ body {
   animation-duration: 0.001s !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.001s !important;
+}
+
+/* ------------------------------------------------ cerberus display font */
+.topbar-left { font-family: "Medusa Gothic", var(--font-display); font-size: 15px; letter-spacing: 4px; }
+.lock-title-font { font-family: "Medusa Gothic", var(--font-display); letter-spacing: 4px; }
+
+/* video boot seal: the loop already animates, so no CSS spin */
+.boot-seal.video {
+  animation: sealIn 0.9s ease forwards;
+  object-fit: cover;
 }

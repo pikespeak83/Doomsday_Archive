@@ -26,7 +26,7 @@ import FaultyTerminal from "./reactbits/FaultyTerminal.jsx";
 import LetterGlitch from "./reactbits/LetterGlitch.jsx";
 import LineSidebar from "./reactbits/LineSidebar.jsx";
 import { playSound, setSoundsEnabled, setMasterVolume } from "./lib/sounds.js";
-import { THEME_FX, BUNDLED_BACKDROPS } from "./lib/themes.js";
+import { THEME_FX, BUNDLED_BACKDROPS, THEME_CHOICES } from "./lib/themes.js";
 
 const APPS = [
   { id: "archive", label: "Archive", width: 680 },
@@ -277,9 +277,10 @@ export default function App() {
     { label: "OPEN ARCHIVE", onClick: () => openApp("archive") },
     { label: "SETTINGS", onClick: () => openApp("settings") },
     { divider: true },
-    { label: `STYLE :: PHOSPHOR GREEN${theme === "green" ? " (ON)" : ""}`, onClick: () => setTheme("green") },
-    { label: `STYLE :: AMBER ALERT${theme === "amber" ? " (ON)" : ""}`, onClick: () => setTheme("amber") },
-    { label: `STYLE :: CRIMSON PROTOCOL${theme === "crimson" ? " (ON)" : ""}`, onClick: () => setTheme("crimson") }
+    ...THEME_CHOICES.map(([value, label]) => ({
+      label: `STYLE :: ${label}${theme === value ? " (ON)" : ""}`,
+      onClick: () => setTheme(value)
+    }))
   ];
 
   if (booted && locked) {

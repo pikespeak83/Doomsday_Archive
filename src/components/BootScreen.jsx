@@ -25,6 +25,7 @@ export default function BootScreen({
 }) {
   const [lineCount, setLineCount] = useState(0);
   const [phase, setPhase] = useState("lines"); // lines -> welcome -> exit
+  const [videoFailed, setVideoFailed] = useState(false);
   const timers = useRef([]);
   const doneRef = useRef(false);
 
@@ -59,7 +60,19 @@ export default function BootScreen({
   return (
     <div className={`boot ${phase === "exit" ? "boot-exit" : ""}`} onClick={beginExit}>
       <LetterGlitch className="boot-glitch" glitchColors={glitchColors} glitchSpeed={70} opacity={0.16} outerVignette />
-      <Seal className="boot-seal" />
+      {videoFailed ? (
+        <Seal className="boot-seal" />
+      ) : (
+        <video
+          className="seal-img boot-seal video"
+          src="assets/brand/cerberus-loop.mp4"
+          autoPlay
+          muted
+          loop
+          playsInline
+          onError={() => setVideoFailed(true)}
+        />
+      )}
       {phase === "lines" && (
         <div className="boot-lines">
           {lines.slice(0, lineCount).map((line) => (

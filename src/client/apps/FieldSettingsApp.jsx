@@ -1,6 +1,7 @@
 import React from "react";
 import { setSoundsEnabled } from "../../lib/sounds.js";
 import { Toggle } from "../../components/apps/SettingsApp.jsx";
+import { THEME_CHOICES } from "../../lib/themes.js";
 
 export default function FieldSettingsApp({ config, onConfigChange }) {
   async function save(partial) {
@@ -51,6 +52,9 @@ export default function FieldSettingsApp({ config, onConfigChange }) {
           ["emerald", "EMERALD MAP"],
           ["ember", "EMBER MAP"],
           ["crimson", "CRIMSON MAP"],
+          ["onyx", "ONYX MAP"],
+          ["circuit", "BLUE CIRCUIT"],
+          ["gold", "GOLD GRID"],
           ["none", "PLAIN"]
         ].map(([value, label]) => (
           <button
@@ -72,11 +76,7 @@ export default function FieldSettingsApp({ config, onConfigChange }) {
       <hr className="hr" />
       <div className="field-label">STYLES</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {[
-          ["green", "PHOSPHOR GREEN"],
-          ["amber", "AMBER ALERT"],
-          ["crimson", "CRIMSON PROTOCOL"]
-        ].map(([value, label]) => (
+        {THEME_CHOICES.map(([value, label]) => (
           <button
             key={value}
             className={`btn small ${(config.theme || "green") === value ? "" : "ghost"}`}
@@ -91,4 +91,4 @@ export default function FieldSettingsApp({ config, onConfigChange }) {
 }
 
 /** Bundled backdrops force the matching style. */
-const BACKDROP_THEMES = { emerald: "green", ember: "amber", crimson: "crimson" };
+const BACKDROP_THEMES = { emerald: "green", ember: "amber", crimson: "crimson", onyx: "mono", circuit: "cobalt", gold: "gold" };

@@ -17,7 +17,7 @@ import FieldHelpApp from "./apps/FieldHelpApp.jsx";
 import FieldLiveFeed from "./FieldLiveFeed.jsx";
 import MediaViewer from "../components/MediaViewer.jsx";
 import TaskBar from "../components/TaskBar.jsx";
-import { THEME_FX, BUNDLED_BACKDROPS } from "../lib/themes.js";
+import { THEME_FX, BUNDLED_BACKDROPS, THEME_CHOICES } from "../lib/themes.js";
 import { playSound, setSoundsEnabled } from "../lib/sounds.js";
 import { baseUrl, listFiles, requestAccess, accessState, hostInfo, broadcastState, downloadUrl } from "./api.js";
 
@@ -373,9 +373,10 @@ export default function FieldApp() {
     { label: "OPEN VAULT", onClick: () => openApp("archive") },
     { label: "SETTINGS", onClick: () => openApp("settings") },
     { divider: true },
-    { label: `STYLE :: PHOSPHOR GREEN${theme === "green" ? " (ON)" : ""}`, onClick: () => setTheme("green") },
-    { label: `STYLE :: AMBER ALERT${theme === "amber" ? " (ON)" : ""}`, onClick: () => setTheme("amber") },
-    { label: `STYLE :: CRIMSON PROTOCOL${theme === "crimson" ? " (ON)" : ""}`, onClick: () => setTheme("crimson") }
+    ...THEME_CHOICES.map(([value, label]) => ({
+      label: `STYLE :: ${label}${theme === value ? " (ON)" : ""}`,
+      onClick: () => setTheme(value)
+    }))
   ];
 
   return (

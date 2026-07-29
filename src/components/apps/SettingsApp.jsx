@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { playSound, setSoundsEnabled, setMasterVolume } from "../../lib/sounds.js";
+import { THEME_CHOICES } from "../../lib/themes.js";
 
 function fmtGb(bytes) {
   if (!bytes) return "?";
@@ -168,6 +169,9 @@ export default function SettingsApp({ config, onConfigChange, notify }) {
               ["emerald", "EMERALD MAP"],
               ["ember", "EMBER MAP"],
               ["crimson", "CRIMSON MAP"],
+              ["onyx", "ONYX MAP"],
+              ["circuit", "BLUE CIRCUIT"],
+              ["gold", "GOLD GRID"],
               ["terminal", "FAULTY TERMINAL"],
               ["glitch", "LETTER GLITCH"],
               ["none", "PLAIN"]
@@ -206,11 +210,7 @@ export default function SettingsApp({ config, onConfigChange, notify }) {
 
           <div className="field-label">STYLES</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {[
-              ["green", "PHOSPHOR GREEN"],
-              ["amber", "AMBER ALERT"],
-              ["crimson", "CRIMSON PROTOCOL"]
-            ].map(([value, label]) => (
+            {THEME_CHOICES.map(([value, label]) => (
               <button
                 key={value}
                 className={`btn small ${(config.theme || "green") === value ? "" : "ghost"}`}
@@ -303,7 +303,7 @@ export default function SettingsApp({ config, onConfigChange, notify }) {
 }
 
 /** Bundled backdrops force the matching style. */
-const BACKDROP_THEMES = { emerald: "green", ember: "amber", crimson: "crimson" };
+const BACKDROP_THEMES = { emerald: "green", ember: "amber", crimson: "crimson", onyx: "mono", circuit: "cobalt", gold: "gold" };
 
 function PasswordSection({ config, onConfigChange }) {
   const [current, setCurrent] = useState("");
