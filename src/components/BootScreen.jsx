@@ -20,7 +20,8 @@ export default function BootScreen({
   hostname,
   onDone,
   lines = DEFAULT_LINES,
-  subtitle = "DATA CONTAINMENT INITIATIVE :: ARCHIVE NODE ONLINE"
+  subtitle = "DATA CONTAINMENT INITIATIVE :: ARCHIVE NODE ONLINE",
+  glitchColors
 }) {
   const [lineCount, setLineCount] = useState(0);
   const [phase, setPhase] = useState("lines"); // lines -> welcome -> exit
@@ -57,7 +58,7 @@ export default function BootScreen({
 
   return (
     <div className={`boot ${phase === "exit" ? "boot-exit" : ""}`} onClick={beginExit}>
-      <LetterGlitch className="boot-glitch" glitchSpeed={70} opacity={0.16} outerVignette />
+      <LetterGlitch className="boot-glitch" glitchColors={glitchColors} glitchSpeed={70} opacity={0.16} outerVignette />
       <Seal className="boot-seal" />
       {phase === "lines" && (
         <div className="boot-lines">

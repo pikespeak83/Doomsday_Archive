@@ -67,6 +67,8 @@ const hostDefaults = {
   backgroundImage: "",
   /** UI style: green, amber, or crimson. Follows bundled map backdrops. */
   theme: "green",
+  /** Saved desktop icon positions, appId -> { x, y }. */
+  iconPositions: {},
   /** Devices the host has approved: { id, name, token, approvedAt, lastSeen }. */
   approvedDevices: []
 };

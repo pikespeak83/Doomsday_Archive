@@ -7,12 +7,19 @@ let zCounter = 50;
 export default function WindowFrame({ title, onClose, onMinimize, minimized, initial, width, children }) {
   const [pos, setPos] = useState(initial || { x: 120, y: 70 });
   const [z, setZ] = useState(() => ++zCounter);
+  const [closing, setClosing] = useState(false);
   const drag = useRef(null);
 
   useEffect(() => {
     playSound("open", 0.4);
     return () => playSound("close", 0.35);
   }, []);
+
+  function requestClose() {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(onClose, 130);
+  }
 
   function onPointerDown(e) {
     drag.current = { startX: e.clientX, startY: e.clientY, baseX: pos.x, baseY: pos.y };
@@ -33,7 +40,7 @@ export default function WindowFrame({ title, onClose, onMinimize, minimized, ini
 
   return (
     <div
-      className="window"
+      className={`window ${closing ? "win-closing" : ""}`}
       style={{ left: pos.x, top: pos.y, zIndex: z, width, display: minimized ? "none" : undefined }}
       onMouseDown={() => setZ(++zCounter)}
     >
@@ -57,7 +64,7 @@ export default function WindowFrame({ title, onClose, onMinimize, minimized, ini
           )}
           <button
             className="window-close"
-            onClick={onClose}
+            onClick={requestClose}
             onPointerDown={(e) => e.stopPropagation()}
             title="Close"
           >

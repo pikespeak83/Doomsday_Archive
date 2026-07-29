@@ -168,6 +168,7 @@ export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBro
 
   return (
     <div
+      style={{ minHeight: 300 }}
       onContextMenu={(e) => {
         e.preventDefault();
         setMenu({ x: e.clientX, y: e.clientY, entry: null });

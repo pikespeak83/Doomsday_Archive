@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import BootScreen from "../components/BootScreen.jsx";
 import TopBar from "../components/TopBar.jsx";
 import Seal from "../components/Seal.jsx";
-import FolderIcon from "../components/FolderIcon.jsx";
+import DeskIcon from "../components/DeskIcon.jsx";
+import ContextMenu from "../components/ContextMenu.jsx";
 import WindowFrame from "../components/WindowFrame.jsx";
 import FaultyTerminal from "../reactbits/FaultyTerminal.jsx";
 import DecryptedText from "../reactbits/DecryptedText.jsx";
@@ -56,6 +57,7 @@ export default function FieldApp() {
   const [windows, setWindows] = useState([]); // { key, type, appId, media, feed, title, width, minimized }
   const [toasts, setToasts] = useState([]);
   const [shuttingDown, setShuttingDown] = useState(false);
+  const [deskMenu, setDeskMenu] = useState(null); // { x, y }
   const pollRef = useRef(null);
   const feedPollRef = useRef(null);
   const feedKeyRef = useRef(null);
@@ -347,6 +349,34 @@ export default function FieldApp() {
   const themeClass = theme === "green" ? "" : `theme-${theme}`;
   const backdrop = config.desktopBackground || "map";
   const bundledBackdrop = BUNDLED_BACKDROPS[backdrop];
+  const iconPositions = config.iconPositions || {};
+
+  async function moveIcon(appId, pos) {
+    const next = await window.fieldApi.saveConfig({
+      iconPositions: { ...(config.iconPositions || {}), [appId]: pos }
+    });
+    setConfig(next);
+  }
+
+  async function setTheme(value) {
+    playSound("toggle", 0.4);
+    setConfig(await window.fieldApi.saveConfig({ theme: value }));
+  }
+
+  function onDesktopContext(e) {
+    if (e.target.closest(".window") || e.target.closest(".desk-icon") || e.target.closest(".taskbar") || e.target.closest(".ctx-menu")) return;
+    e.preventDefault();
+    setDeskMenu({ x: e.clientX, y: e.clientY });
+  }
+
+  const deskMenuItems = [
+    { label: "OPEN VAULT", onClick: () => openApp("archive") },
+    { label: "SETTINGS", onClick: () => openApp("settings") },
+    { divider: true },
+    { label: `STYLE :: PHOSPHOR GREEN${theme === "green" ? " (ON)" : ""}`, onClick: () => setTheme("green") },
+    { label: `STYLE :: AMBER ALERT${theme === "amber" ? " (ON)" : ""}`, onClick: () => setTheme("amber") },
+    { label: `STYLE :: CRIMSON PROTOCOL${theme === "crimson" ? " (ON)" : ""}`, onClick: () => setTheme("crimson") }
+  ];
 
   return (
     <>
@@ -356,6 +386,7 @@ export default function FieldApp() {
           hostname={sysInfo.hostname}
           lines={FIELD_BOOT_LINES}
           subtitle="DATA CONTAINMENT INITIATIVE :: FIELD TERMINAL READY"
+          glitchColors={fx.glitch}
           onDone={() => setPhase("connect")}
         />
       )}
@@ -498,7 +529,7 @@ export default function FieldApp() {
       )}
 
       {phase === "desktop" && connection && (
-        <div className="desktop">
+        <div className="desktop" onContextMenu={onDesktopContext}>
           {backdrop !== "none" && !bundledBackdrop && (
             <div className="desktop-shader">
               <FaultyTerminal tint={fx.tint} brightness={0.55} mouseReact={false} timeScale={0.22} />
@@ -529,13 +560,25 @@ export default function FieldApp() {
           />
 
           <div className="icon-column">
-            {APPS.map((app) => (
-              <button key={app.id} className="desk-icon" onClick={() => openApp(app.id)}>
-                <FolderIcon />
-                <span>{app.label}</span>
-              </button>
+            {APPS.filter((app) => !iconPositions[app.id]).map((app) => (
+              <DeskIcon
+                key={app.id}
+                label={app.label}
+                pos={null}
+                onOpen={() => openApp(app.id)}
+                onMove={(pos) => moveIcon(app.id, pos)}
+              />
             ))}
           </div>
+          {APPS.filter((app) => iconPositions[app.id]).map((app) => (
+            <DeskIcon
+              key={app.id}
+              label={app.label}
+              pos={iconPositions[app.id]}
+              onOpen={() => openApp(app.id)}
+              onMove={(pos) => moveIcon(app.id, pos)}
+            />
+          ))}
 
           {windows.map((win, index) => {
             const initial = { x: 90 + (index % 8) * 36, y: 48 + (index % 8) * 30 };
@@ -583,6 +626,15 @@ export default function FieldApp() {
             onToggle={(key) => toggleMinimize(key)}
             onClose={closeWindow}
           />
+
+          {deskMenu && (
+            <ContextMenu
+              x={deskMenu.x}
+              y={deskMenu.y}
+              items={deskMenuItems}
+              onClose={() => setDeskMenu(null)}
+            />
+          )}
         </div>
       )}
 

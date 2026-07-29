@@ -16,6 +16,11 @@
   --bg: #020703;
   --panel: rgba(7, 18, 4, 0.92);
   --red: #ff5f4f;
+  --folder-face-a: #c8f542;
+  --folder-face-b: #86c81e;
+  --folder-back-a: #9ede2c;
+  --folder-back-b: #5f9a12;
+  --folder-edge: #2c4d07;
   --font-display: "VT323", monospace;
   --font-mono: "Share Tech Mono", monospace;
 }
@@ -30,6 +35,11 @@
   --bg: #080401;
   --panel: rgba(26, 14, 2, 0.92);
   --red: #ff5f4f;
+  --folder-face-a: #ffd06e;
+  --folder-face-b: #e09122;
+  --folder-back-a: #f2b64a;
+  --folder-back-b: #a3690f;
+  --folder-edge: #4d2c07;
 }
 .os-root.theme-crimson {
   --green: #ff5240;
@@ -40,6 +50,11 @@
   --bg: #040910;
   --panel: rgba(8, 14, 24, 0.92);
   --red: #ffab26;
+  --folder-face-a: #ff8f7d;
+  --folder-face-b: #d63a28;
+  --folder-back-a: #f26a56;
+  --folder-back-b: #a52c1e;
+  --folder-edge: #4d0e07;
 }
 
 /* Cerberus seal image: circular crop of the emblem art. */
@@ -63,6 +78,7 @@ body,
 #root {
   height: 100%;
   overflow: hidden;
+  background: #020703;
 }
 
 body {
@@ -243,11 +259,11 @@ body {
   position: absolute;
   inset: 6% 8% 10% 8%;
   background:
-    linear-gradient(180deg, rgba(125, 255, 63, 0.85), rgba(52, 140, 18, 0.9));
+    linear-gradient(180deg, color-mix(in srgb, var(--green) 85%, transparent), color-mix(in srgb, var(--green-dim) 90%, transparent));
   -webkit-mask: url("/assets/world-map.svg") center / contain no-repeat;
   mask: url("/assets/world-map.svg") center / contain no-repeat;
   opacity: 0.34;
-  filter: drop-shadow(0 0 24px rgba(125, 255, 63, 0.5));
+  filter: drop-shadow(0 0 24px color-mix(in srgb, var(--green) 50%, transparent));
   pointer-events: none;
 }
 .map-grid {
@@ -255,8 +271,8 @@ body {
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(125, 255, 63, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(125, 255, 63, 0.07) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--green) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--green) 7%, transparent) 1px, transparent 1px);
   background-size: 90px 90px;
 }
 .desktop-seal {
@@ -293,14 +309,23 @@ body {
   cursor: pointer;
   font-family: var(--font-mono);
 }
-.desk-icon:hover { border-color: var(--green-faint); background: rgba(125, 255, 63, 0.06); }
+.desk-icon:hover { border-color: var(--green-faint); background: color-mix(in srgb, var(--green) 6%, transparent); }
 .desk-icon:active { transform: translateY(1px); }
-.desk-icon svg { width: 56px; height: 44px; filter: drop-shadow(0 0 8px rgba(154, 222, 60, 0.55)); }
+.desk-icon.free {
+  position: absolute;
+  z-index: 5;
+}
+.desk-icon.dragging {
+  opacity: 0.8;
+  z-index: 85;
+  border-color: var(--green-dim);
+}
+.desk-icon svg { width: 56px; height: 44px; filter: drop-shadow(0 0 8px color-mix(in srgb, var(--green) 55%, transparent)); }
 .desk-icon span {
   color: var(--green-bright);
   font-size: 13px;
   letter-spacing: 1px;
-  text-shadow: 0 0 8px rgba(125, 255, 63, 0.5);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--green) 50%, transparent);
 }
 
 /* ------------------------------------------------ windows */
@@ -507,6 +532,14 @@ body {
 .ctx-divider { border-top: 1px dashed var(--green-faint); margin: 4px 6px; }
 
 .drop-target { outline: 1px dashed var(--green); background: rgba(125, 255, 63, 0.1); }
+
+.win-closing {
+  animation: winOut 0.13s ease-in forwards;
+  pointer-events: none;
+}
+@keyframes winOut {
+  to { opacity: 0; transform: scale(0.95); }
+}
 
 /* ------------------------------------------------ taskbar */
 .taskbar {

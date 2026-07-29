@@ -4,7 +4,7 @@ import LetterGlitch from "../reactbits/LetterGlitch.jsx";
 import { playSound } from "../lib/sounds.js";
 
 /** Full-screen vault lock. Shown when the host set a passphrase. */
-export default function LockScreen({ onUnlocked }) {
+export default function LockScreen({ onUnlocked, glitchColors }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -27,7 +27,7 @@ export default function LockScreen({ onUnlocked }) {
 
   return (
     <div className="lock-screen">
-      <LetterGlitch className="boot-glitch" glitchSpeed={80} opacity={0.14} outerVignette />
+      <LetterGlitch className="boot-glitch" glitchColors={glitchColors} glitchSpeed={80} opacity={0.14} outerVignette />
       <Seal className="lock-seal" />
       <div className={`panel lock-panel ${error ? "shake" : ""}`}>
         <div className="bright" style={{ letterSpacing: 3, marginBottom: 6 }}>VAULT SEALED</div>

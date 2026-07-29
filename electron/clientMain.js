@@ -34,7 +34,8 @@ const fieldDefaults = {
   uiSoundsEnabled: true,
   bootAnimationEnabled: true,
   desktopBackground: "map",
-  theme: "green"
+  theme: "green",
+  iconPositions: {}
 };
 
 const store = createJsonStore("field-config.json", fieldDefaults);

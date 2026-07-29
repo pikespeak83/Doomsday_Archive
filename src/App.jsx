@@ -3,7 +3,8 @@ import BootScreen from "./components/BootScreen.jsx";
 import LockScreen from "./components/LockScreen.jsx";
 import TopBar from "./components/TopBar.jsx";
 import Seal from "./components/Seal.jsx";
-import FolderIcon from "./components/FolderIcon.jsx";
+import DeskIcon from "./components/DeskIcon.jsx";
+import ContextMenu from "./components/ContextMenu.jsx";
 import WindowFrame from "./components/WindowFrame.jsx";
 import TaskBar from "./components/TaskBar.jsx";
 import MediaViewer from "./components/MediaViewer.jsx";
@@ -42,6 +43,7 @@ export default function App() {
   const [windows, setWindows] = useState([]); // { key, type, appId, media, title, width, minimized }
   const [toasts, setToasts] = useState([]);
   const [shuttingDown, setShuttingDown] = useState(false);
+  const [deskMenu, setDeskMenu] = useState(null); // { x, y }
   const windowsRef = useRef(windows);
   windowsRef.current = windows;
 
@@ -176,11 +178,66 @@ export default function App() {
   const fx = THEME_FX[theme] || THEME_FX.green;
   const themeClass = theme === "green" ? "" : `theme-${theme}`;
   const bundledBackdrop = BUNDLED_BACKDROPS[backdrop];
+  const iconPositions = config.iconPositions || {};
+
+  async function moveIcon(appId, pos) {
+    const next = await window.archiveApi.saveConfig({
+      iconPositions: { ...(config.iconPositions || {}), [appId]: pos }
+    });
+    setConfig(next);
+  }
+
+  async function setTheme(value) {
+    playSound("toggle", 0.4);
+    setConfig(await window.archiveApi.saveConfig({ theme: value }));
+  }
+
+  async function createFromDesktop(type) {
+    const src = sources[0];
+    if (!src) return;
+    const listing = await window.archiveApi.browse(src.id);
+    const names = new Set((listing?.entries || []).map((en) => en.name.toLowerCase()));
+    const base = type === "dir" ? "NEW FOLDER" : "NEW FILE";
+    let name = type === "dir" ? base : `${base}.txt`;
+    let n = 2;
+    while (names.has(name.toLowerCase())) {
+      name = type === "dir" ? `${base} (${n})` : `${base} (${n}).txt`;
+      n += 1;
+    }
+    const res = type === "dir"
+      ? await window.archiveApi.vaultMkdir(src.id, name)
+      : await window.archiveApi.vaultNewFile(src.id, name);
+    if (res?.ok === false) {
+      playSound("error", 0.5);
+      pushToast(`CREATE FAILED: ${res.error || "unknown"}`);
+    } else {
+      playSound("select", 0.4);
+      pushToast(`CREATED ${name} IN ${(src.label || "SOURCE").toUpperCase()} :: SEE ARCHIVE`);
+    }
+  }
+
+  function onDesktopContext(e) {
+    if (e.target.closest(".window") || e.target.closest(".desk-icon") || e.target.closest(".taskbar") || e.target.closest(".ctx-menu")) return;
+    e.preventDefault();
+    setDeskMenu({ x: e.clientX, y: e.clientY });
+  }
+
+  const deskMenuItems = [
+    { label: "NEW FOLDER", disabled: !sources.length, onClick: () => createFromDesktop("dir") },
+    { label: "NEW FILE", disabled: !sources.length, onClick: () => createFromDesktop("file") },
+    { divider: true },
+    { label: "OPEN ARCHIVE", onClick: () => openApp("archive") },
+    { label: "SETTINGS", onClick: () => openApp("settings") },
+    { divider: true },
+    { label: `STYLE :: PHOSPHOR GREEN${theme === "green" ? " (ON)" : ""}`, onClick: () => setTheme("green") },
+    { label: `STYLE :: AMBER ALERT${theme === "amber" ? " (ON)" : ""}`, onClick: () => setTheme("amber") },
+    { label: `STYLE :: CRIMSON PROTOCOL${theme === "crimson" ? " (ON)" : ""}`, onClick: () => setTheme("crimson") }
+  ];
 
   if (booted && locked) {
     return (
       <div className={`os-root crt ${themeClass}`}>
-        <LockScreen onUnlocked={() => setLocked(false)} />
+        <LockScreen onUnlocked={() => setLocked(false)} glitchColors={fx.glitch} />
       </div>
     );
   }
@@ -189,10 +246,10 @@ export default function App() {
     <>
     <div className={`os-root crt ${themeClass} ${shuttingDown ? "powering-off" : ""}`}>
       {!booted && (
-        <BootScreen hostname={sysInfo.hostname} onDone={() => setBooted(true)} />
+        <BootScreen hostname={sysInfo.hostname} glitchColors={fx.glitch} onDone={() => setBooted(true)} />
       )}
       <TopBar title="PROJECT CERBERUS" stats={stats} onShutdown={shutdown} />
-      <div className="desktop">
+      <div className="desktop" onContextMenu={onDesktopContext}>
         {(backdrop === "map" || backdrop === "terminal") && (
           <div className="desktop-shader">
             <FaultyTerminal
@@ -237,13 +294,25 @@ export default function App() {
         />
 
         <div className="icon-column">
-          {APPS.map((app) => (
-            <button key={app.id} className="desk-icon" onClick={() => openApp(app.id)}>
-              <FolderIcon />
-              <span>{app.label}</span>
-            </button>
+          {APPS.filter((app) => !iconPositions[app.id]).map((app) => (
+            <DeskIcon
+              key={app.id}
+              label={app.label}
+              pos={null}
+              onOpen={() => openApp(app.id)}
+              onMove={(pos) => moveIcon(app.id, pos)}
+            />
           ))}
         </div>
+        {APPS.filter((app) => iconPositions[app.id]).map((app) => (
+          <DeskIcon
+            key={app.id}
+            label={app.label}
+            pos={iconPositions[app.id]}
+            onOpen={() => openApp(app.id)}
+            onMove={(pos) => moveIcon(app.id, pos)}
+          />
+        ))}
 
         {windows.map((win, index) => {
           const initial = { x: 90 + (index % 8) * 36, y: 48 + (index % 8) * 30 };
@@ -286,6 +355,15 @@ export default function App() {
           onToggle={(key) => toggleMinimize(key)}
           onClose={closeWindow}
         />
+
+        {deskMenu && (
+          <ContextMenu
+            x={deskMenu.x}
+            y={deskMenu.y}
+            items={deskMenuItems}
+            onClose={() => setDeskMenu(null)}
+          />
+        )}
       </div>
 
       <div className="toast-stack">
