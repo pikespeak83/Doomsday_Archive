@@ -20,6 +20,15 @@ contextBridge.exposeInMainWorld("archiveApi", {
   vaultMove: (fromRel, toDirRel) => ipcRenderer.invoke("vault:move", fromRel, toDirRel),
   vaultDelete: (relPath) => ipcRenderer.invoke("vault:delete", relPath),
 
+  getData: (name) => ipcRenderer.invoke("data:get", name),
+  saveData: (name, value) => ipcRenderer.invoke("data:save", name, value),
+  searchArchive: (query) => ipcRenderer.invoke("archive:search", query),
+  provisionArchive: (sourceId) => ipcRenderer.invoke("archive:provision", sourceId),
+  runBat: (relPath) => ipcRenderer.invoke("terminal:runBat", relPath),
+  pickDossierPhoto: () => ipcRenderer.invoke("personnel:pickPhoto"),
+  oracleStatus: () => ipcRenderer.invoke("oracle:status"),
+  oracleAsk: (prompt, model) => ipcRenderer.invoke("oracle:ask", prompt, model),
+
   getSecurityState: () => ipcRenderer.invoke("security:getState"),
   unlockVault: (password) => ipcRenderer.invoke("security:unlock", password),
   setVaultPassword: (currentPassword, newPassword) =>

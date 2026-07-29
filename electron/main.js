@@ -11,6 +11,9 @@ const { createUpdater } = require("../backend/updater");
 const { listVirtual, resolveVirtual, sourceStats, kindOf } = require("../backend/archiveStore");
 const vaultOps = require("../backend/vaultOps");
 const { hashPassword, verifyPassword } = require("../backend/passwordStore");
+const { getData, saveData } = require("../backend/dataStore");
+const { searchArchive } = require("../backend/archiveSearch");
+const { provisionStandardFolders } = require("../backend/provision");
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -416,6 +419,127 @@ ipcMain.handle("security:clearPassword", (_event, currentPassword) => {
   writeConfig(currentConfig);
   vaultUnlocked = true;
   return { ok: true };
+});
+
+// ---- cerberus systems (personnel, missions, research, comms, security)
+
+ipcMain.handle("data:get", (_event, name) => {
+  try {
+    return getData(String(name || ""));
+  } catch (err) {
+    return { error: String(err.message || err) };
+  }
+});
+
+ipcMain.handle("data:save", (_event, name, value) => {
+  try {
+    return saveData(String(name || ""), value);
+  } catch (err) {
+    return { error: String(err.message || err) };
+  }
+});
+
+ipcMain.handle("archive:search", (_event, query) => {
+  try {
+    return searchArchive(currentConfig.archiveSources || [], query);
+  } catch (err) {
+    return { results: [], truncated: false, error: String(err.message || err) };
+  }
+});
+
+ipcMain.handle("archive:provision", (_event, sourceId) => {
+  try {
+    return { ok: true, ...provisionStandardFolders(currentConfig.archiveSources || [], sourceId) };
+  } catch (err) {
+    return { ok: false, error: String(err.message || err) };
+  }
+});
+
+ipcMain.handle("terminal:runBat", (_event, relPath) => {
+  return new Promise((resolve) => {
+    try {
+      const { abs } = resolveVirtual(currentConfig.archiveSources || [], relPath || "");
+      const ext = path.extname(abs).toLowerCase();
+      if (ext !== ".bat" && ext !== ".cmd") {
+        return resolve({ ok: false, error: "only .bat and .cmd files can be executed" });
+      }
+      if (!fs.existsSync(abs)) return resolve({ ok: false, error: "file not found" });
+      execFile(
+        "cmd.exe",
+        ["/d", "/s", "/c", abs],
+        { cwd: path.dirname(abs), timeout: 30000, windowsHide: true, maxBuffer: 512 * 1024 },
+        (err, stdout, stderr) => {
+          const output = `${stdout || ""}${stderr ? `\n${stderr}` : ""}`.trim();
+          resolve({ ok: !err, code: err?.code ?? 0, output: output.slice(0, 20000) });
+        }
+      );
+    } catch (err) {
+      resolve({ ok: false, error: String(err.message || err) });
+    }
+  });
+});
+
+ipcMain.handle("personnel:pickPhoto", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Attach a dossier photo",
+    properties: ["openFile"],
+    filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }]
+  });
+  if (result.canceled || !result.filePaths?.[0]) return null;
+  try {
+    const file = result.filePaths[0];
+    const stat = fs.statSync(file);
+    if (stat.size > 3 * 1024 * 1024) return { error: "photo must be under 3 MB" };
+    const ext = path.extname(file).slice(1).toLowerCase();
+    const mime = ext === "jpg" ? "jpeg" : ext;
+    return { dataUrl: `data:image/${mime};base64,${fs.readFileSync(file).toString("base64")}` };
+  } catch (err) {
+    return { error: String(err.message || err) };
+  }
+});
+
+// ---- oracle (offline assistant, upgrades itself if a local LLM is running)
+
+const ORACLE_URL = "http://127.0.0.1:11434";
+
+ipcMain.handle("oracle:status", async () => {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1200);
+    const res = await fetch(`${ORACLE_URL}/api/tags`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return { online: false };
+    const body = await res.json();
+    const models = (body.models || []).map((m) => m.name);
+    return { online: models.length > 0, models };
+  } catch {
+    return { online: false };
+  }
+});
+
+ipcMain.handle("oracle:ask", async (_event, prompt, model) => {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60000);
+    const res = await fetch(`${ORACLE_URL}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: model,
+        prompt: String(prompt || "").slice(0, 4000),
+        stream: false,
+        options: { num_predict: 400 },
+        system: "You are ORACLE, the terse AI core of an offline doomsday archive vault called Project Cerberus. Answer in short, clipped, terminal-style sentences. Stay in character. Never mention the internet."
+      })
+    });
+    clearTimeout(timer);
+    if (!res.ok) return { ok: false, error: `LLM error ${res.status}` };
+    const body = await res.json();
+    return { ok: true, text: String(body.response || "").trim() };
+  } catch (err) {
+    return { ok: false, error: String(err.message || err) };
+  }
 });
 
 // ---- desktop background

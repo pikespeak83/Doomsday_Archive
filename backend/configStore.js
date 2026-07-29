@@ -52,6 +52,14 @@ const hostDefaults = {
   allowDownloads: true,
   uiSoundsEnabled: true,
   bootAnimationEnabled: true,
+  /** Master volume for interface sounds, 0..1. */
+  soundVolume: 1,
+  /** CRT scanline overlay. */
+  scanlinesEnabled: true,
+  /** Accessibility: disable heavy animation (shaders, glitch). */
+  reduceMotion: false,
+  /** Occasional ambient flavor notifications. */
+  ambientEventsEnabled: true,
   /** scrypt hash of the vault passphrase; empty = no passphrase. */
   passwordHash: "",
   passwordSalt: "",

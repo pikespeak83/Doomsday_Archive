@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { playSound, setSoundsEnabled } from "../../lib/sounds.js";
+import { playSound, setSoundsEnabled, setMasterVolume } from "../../lib/sounds.js";
 
 function fmtGb(bytes) {
   if (!bytes) return "?";
@@ -7,8 +7,11 @@ function fmtGb(bytes) {
   return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
 }
 
-/** Link full drives or folders to the vault, tune uplink, toggles. */
-export default function SettingsApp({ config, onConfigChange }) {
+const TABS = ["STORAGE", "NETWORK", "GRAPHICS", "AUDIO", "SYSTEM", "SECURITY"];
+
+/** Tabbed settings: storage, network, graphics, audio, system, security. */
+export default function SettingsApp({ config, onConfigChange, notify }) {
+  const [tab, setTab] = useState("STORAGE");
   const [drives, setDrives] = useState([]);
   const [portDraft, setPortDraft] = useState(String(config.port || 8737));
   const sources = config.archiveSources || [];
@@ -41,190 +44,260 @@ export default function SettingsApp({ config, onConfigChange }) {
     onConfigChange(next);
   }
 
+  async function provision(sourceId) {
+    playSound("confirm", 0.5);
+    const res = await window.archiveApi.provisionArchive(sourceId);
+    if (res.ok) notify?.(`STANDARD ARCHIVE FOLDERS READY (${res.created} CREATED)`);
+    else notify?.(`PROVISION FAILED: ${res.error}`, true);
+  }
+
   const linkedPaths = new Set(sources.map((s) => s.path.toLowerCase()));
 
   return (
     <div>
-      <div className="field-label">LINKED STORAGE (THE VAULT)</div>
-      {!sources.length && <p className="warn">NO DEVICE LINKED.</p>}
-      {sources.length > 0 && (
-        <table className="data-table">
-          <tbody>
-            {sources.map((source) => (
-              <tr key={source.id}>
-                <td className="bright" style={{ wordBreak: "break-all" }}>{source.label || source.path}</td>
-                <td className="dim" style={{ wordBreak: "break-all" }}>{source.path}</td>
-                <td style={{ width: 90 }}>
-                  <button className="btn small danger" onClick={() => unlink(source.id)}>UNLINK</button>
-                </td>
-              </tr>
+      <div className="app-tabs">
+        {TABS.map((t) => (
+          <button key={t} className={`app-tab ${tab === t ? "on" : ""}`}
+            onClick={() => { playSound("click", 0.3); setTab(t); }}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {tab === "STORAGE" && (
+        <>
+          <div className="field-label" style={{ marginTop: 0 }}>LINKED STORAGE (THE VAULT)</div>
+          {!sources.length && <p className="warn">NO DEVICE LINKED.</p>}
+          {sources.length > 0 && (
+            <table className="data-table">
+              <tbody>
+                {sources.map((source) => (
+                  <tr key={source.id}>
+                    <td className="bright" style={{ wordBreak: "break-all" }}>{source.label || source.path}</td>
+                    <td className="dim" style={{ wordBreak: "break-all" }}>{source.path}</td>
+                    <td style={{ width: 190, textAlign: "right" }}>
+                      <button className="btn small ghost" onClick={() => provision(source.id)}>PROVISION</button>{" "}
+                      <button className="btn small danger" onClick={() => unlink(source.id)}>UNLINK</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+            <button className="btn" onClick={linkFolder}>LINK FOLDER...</button>
+          </div>
+          <p className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+            PROVISION creates the standard doomsday folder tree (collapse phases, field manuals,
+            protocol binder, fallout shelter, family documents, SOPs, disaster forms).
+          </p>
+
+          <div className="field-label">DETECTED DRIVES (LINK SERVES THE FULL DRIVE)</div>
+          <table className="data-table">
+            <tbody>
+              {drives.map((drive) => {
+                const linked = linkedPaths.has(`${drive.letter.toLowerCase()}:\\`);
+                return (
+                  <tr key={drive.letter}>
+                    <td className="bright">{drive.letter}:</td>
+                    <td>{drive.label || <span className="dim">unlabeled</span>}</td>
+                    <td className="dim">{drive.type}</td>
+                    <td className="dim">
+                      {drive.totalBytes ? `${fmtGb(drive.freeBytes)} free / ${fmtGb(drive.totalBytes)}` : ""}
+                    </td>
+                    <td style={{ width: 90 }}>
+                      {linked
+                        ? <span className="badge live">LINKED</span>
+                        : <button className="btn small" onClick={() => linkDrive(drive)}>LINK</button>}
+                    </td>
+                  </tr>
+                );
+              })}
+              {!drives.length && <tr><td className="dim">scanning...</td></tr>}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {tab === "NETWORK" && (
+        <>
+          <div className="field-label" style={{ marginTop: 0 }}>UPLINK PORT</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              className="text-input"
+              style={{ width: 120 }}
+              value={portDraft}
+              onChange={(e) => setPortDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 5))}
+            />
+            <button
+              className="btn"
+              onClick={async () => {
+                const port = Math.max(1024, Math.min(65535, Number(portDraft) || 8737));
+                setPortDraft(String(port));
+                playSound("confirm", 0.5);
+                await save({ port });
+                await window.archiveApi.restartLan();
+              }}
+            >
+              APPLY + RESTART UPLINK
+            </button>
+          </div>
+          <hr className="hr" />
+          <Toggle
+            label="UPLINK AUTO-START"
+            checked={config.sharingEnabled !== false}
+            onChange={async (value) => {
+              await save({ sharingEnabled: value });
+              await window.archiveApi.setSharing(value);
+            }}
+          />
+          <Toggle
+            label="ALLOW FIELD DOWNLOADS"
+            checked={config.allowDownloads !== false}
+            onChange={(value) => save({ allowDownloads: value })}
+          />
+        </>
+      )}
+
+      {tab === "GRAPHICS" && (
+        <>
+          <div className="field-label" style={{ marginTop: 0 }}>DESKTOP BACKDROP</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[
+              ["map", "WORLD MAP"],
+              ["emerald", "EMERALD MAP"],
+              ["ember", "EMBER MAP"],
+              ["crimson", "CRIMSON MAP"],
+              ["terminal", "FAULTY TERMINAL"],
+              ["glitch", "LETTER GLITCH"],
+              ["none", "PLAIN"]
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                className={`btn small ${config.desktopBackground === value || (!config.desktopBackground && value === "map") ? "" : "ghost"}`}
+                onClick={() => {
+                  playSound("toggle", 0.4);
+                  const matched = BACKDROP_THEMES[value];
+                  void save({ desktopBackground: value, ...(matched ? { theme: matched } : {}) });
+                }}
+              >
+                {label}
+              </button>
             ))}
-          </tbody>
-        </table>
-      )}
-      <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-        <button className="btn" onClick={linkFolder}>LINK FOLDER...</button>
-      </div>
+            <button
+              className={`btn small ${config.desktopBackground === "image" ? "" : "ghost"}`}
+              onClick={async () => {
+                playSound("click", 0.4);
+                const next = await window.archiveApi.pickBackgroundImage();
+                if (next) onConfigChange(next);
+              }}
+            >
+              CUSTOM IMAGE...
+            </button>
+          </div>
+          <p className="dim" style={{ fontSize: 12, marginTop: 6 }}>
+            Picking a bundled map switches the whole interface style to match it.
+          </p>
+          {config.desktopBackground === "image" && config.backgroundImage && (
+            <p className="dim" style={{ fontSize: 12, marginTop: 6, wordBreak: "break-all" }}>
+              {config.backgroundImage}
+            </p>
+          )}
 
-      <div className="field-label">DETECTED DRIVES (LINK SERVES THE FULL DRIVE)</div>
-      <table className="data-table">
-        <tbody>
-          {drives.map((drive) => {
-            const linked = linkedPaths.has(`${drive.letter.toLowerCase()}:\\`);
-            return (
-              <tr key={drive.letter}>
-                <td className="bright">{drive.letter}:</td>
-                <td>{drive.label || <span className="dim">unlabeled</span>}</td>
-                <td className="dim">{drive.type}</td>
-                <td className="dim">
-                  {drive.totalBytes ? `${fmtGb(drive.freeBytes)} free / ${fmtGb(drive.totalBytes)}` : ""}
-                </td>
-                <td style={{ width: 90 }}>
-                  {linked
-                    ? <span className="badge live">LINKED</span>
-                    : <button className="btn small" onClick={() => linkDrive(drive)}>LINK</button>}
-                </td>
-              </tr>
-            );
-          })}
-          {!drives.length && <tr><td className="dim">scanning...</td></tr>}
-        </tbody>
-      </table>
+          <div className="field-label">STYLES</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[
+              ["green", "PHOSPHOR GREEN"],
+              ["amber", "AMBER ALERT"],
+              ["crimson", "CRIMSON PROTOCOL"]
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                className={`btn small ${(config.theme || "green") === value ? "" : "ghost"}`}
+                onClick={() => {
+                  playSound("toggle", 0.4);
+                  void save({ theme: value });
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-      <hr className="hr" />
-      <div className="field-label">UPLINK PORT</div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input
-          className="text-input"
-          style={{ width: 120 }}
-          value={portDraft}
-          onChange={(e) => setPortDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 5))}
-        />
-        <button
-          className="btn"
-          onClick={async () => {
-            const port = Math.max(1024, Math.min(65535, Number(portDraft) || 8737));
-            setPortDraft(String(port));
-            playSound("confirm", 0.5);
-            await save({ port });
-            await window.archiveApi.restartLan();
-          }}
-        >
-          APPLY + RESTART UPLINK
-        </button>
-      </div>
-
-      <hr className="hr" />
-      <Toggle
-        label="UPLINK AUTO-START"
-        checked={config.sharingEnabled !== false}
-        onChange={async (value) => {
-          await save({ sharingEnabled: value });
-          await window.archiveApi.setSharing(value);
-        }}
-      />
-      <Toggle
-        label="ALLOW FIELD DOWNLOADS"
-        checked={config.allowDownloads !== false}
-        onChange={(value) => save({ allowDownloads: value })}
-      />
-      <Toggle
-        label="BOOT SEQUENCE ANIMATION"
-        checked={config.bootAnimationEnabled !== false}
-        onChange={(value) => save({ bootAnimationEnabled: value })}
-      />
-      <Toggle
-        label="INTERFACE SOUNDS"
-        checked={config.uiSoundsEnabled !== false}
-        onChange={(value) => {
-          setSoundsEnabled(value);
-          return save({ uiSoundsEnabled: value });
-        }}
-      />
-      <Toggle
-        label="RUN IN TRAY ON CLOSE"
-        checked={config.runInTray === true}
-        onChange={(value) => save({ runInTray: value })}
-      />
-      <Toggle
-        label="START WITH PC"
-        checked={config.startWithPc === true}
-        onChange={(value) => save({ startWithPc: value })}
-      />
-      <Toggle
-        label="PC NOTIFICATIONS"
-        checked={config.notificationsEnabled !== false}
-        onChange={(value) => save({ notificationsEnabled: value })}
-      />
-
-      <hr className="hr" />
-      <div className="field-label">DESKTOP BACKDROP</div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {[
-          ["map", "WORLD MAP"],
-          ["emerald", "EMERALD MAP"],
-          ["ember", "EMBER MAP"],
-          ["crimson", "CRIMSON MAP"],
-          ["terminal", "FAULTY TERMINAL"],
-          ["glitch", "LETTER GLITCH"],
-          ["none", "PLAIN"]
-        ].map(([value, label]) => (
-          <button
-            key={value}
-            className={`btn small ${config.desktopBackground === value || (!config.desktopBackground && value === "map") ? "" : "ghost"}`}
-            onClick={() => {
-              playSound("toggle", 0.4);
-              const matched = BACKDROP_THEMES[value];
-              void save({ desktopBackground: value, ...(matched ? { theme: matched } : {}) });
-            }}
-          >
-            {label}
-          </button>
-        ))}
-        <button
-          className={`btn small ${config.desktopBackground === "image" ? "" : "ghost"}`}
-          onClick={async () => {
-            playSound("click", 0.4);
-            const next = await window.archiveApi.pickBackgroundImage();
-            if (next) onConfigChange(next);
-          }}
-        >
-          CUSTOM IMAGE...
-        </button>
-      </div>
-      <p className="dim" style={{ fontSize: 12, marginTop: 6 }}>
-        Picking a bundled map switches the whole interface style to match it.
-      </p>
-      {config.desktopBackground === "image" && config.backgroundImage && (
-        <p className="dim" style={{ fontSize: 12, marginTop: 6, wordBreak: "break-all" }}>
-          {config.backgroundImage}
-        </p>
+          <hr className="hr" />
+          <Toggle
+            label="CRT SCANLINES"
+            checked={config.scanlinesEnabled !== false}
+            onChange={(value) => save({ scanlinesEnabled: value })}
+          />
+          <Toggle
+            label="REDUCE MOTION (ACCESSIBILITY)"
+            checked={config.reduceMotion === true}
+            onChange={(value) => save({ reduceMotion: value })}
+          />
+          <Toggle
+            label="BOOT SEQUENCE ANIMATION"
+            checked={config.bootAnimationEnabled !== false}
+            onChange={(value) => save({ bootAnimationEnabled: value })}
+          />
+        </>
       )}
 
-      <hr className="hr" />
-      <div className="field-label">VAULT PASSPHRASE</div>
-      <PasswordSection config={config} onConfigChange={onConfigChange} />
-
-      <hr className="hr" />
-      <div className="field-label">STYLES</div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {[
-          ["green", "PHOSPHOR GREEN"],
-          ["amber", "AMBER ALERT"],
-          ["crimson", "CRIMSON PROTOCOL"]
-        ].map(([value, label]) => (
-          <button
-            key={value}
-            className={`btn small ${(config.theme || "green") === value ? "" : "ghost"}`}
-            onClick={() => {
-              playSound("toggle", 0.4);
-              void save({ theme: value });
+      {tab === "AUDIO" && (
+        <>
+          <Toggle
+            label="INTERFACE SOUNDS"
+            checked={config.uiSoundsEnabled !== false}
+            onChange={(value) => {
+              setSoundsEnabled(value);
+              return save({ uiSoundsEnabled: value });
             }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+          />
+          <div className="field-label">MASTER VOLUME :: {Math.round((config.soundVolume ?? 1) * 100)}%</div>
+          <input
+            type="range" min="0" max="100" className="vol-slider"
+            value={Math.round((config.soundVolume ?? 1) * 100)}
+            onChange={(e) => {
+              const v = Number(e.target.value) / 100;
+              setMasterVolume(v);
+              void save({ soundVolume: v });
+            }}
+            onMouseUp={() => playSound("click", 0.5)}
+          />
+        </>
+      )}
+
+      {tab === "SYSTEM" && (
+        <>
+          <Toggle
+            label="RUN IN TRAY ON CLOSE"
+            checked={config.runInTray === true}
+            onChange={(value) => save({ runInTray: value })}
+          />
+          <Toggle
+            label="START WITH PC"
+            checked={config.startWithPc === true}
+            onChange={(value) => save({ startWithPc: value })}
+          />
+          <Toggle
+            label="PC NOTIFICATIONS"
+            checked={config.notificationsEnabled !== false}
+            onChange={(value) => save({ notificationsEnabled: value })}
+          />
+          <Toggle
+            label="AMBIENT SYSTEM EVENTS"
+            checked={config.ambientEventsEnabled !== false}
+            onChange={(value) => save({ ambientEventsEnabled: value })}
+          />
+        </>
+      )}
+
+      {tab === "SECURITY" && (
+        <>
+          <div className="field-label" style={{ marginTop: 0 }}>VAULT PASSPHRASE</div>
+          <PasswordSection config={config} onConfigChange={onConfigChange} />
+        </>
+      )}
     </div>
   );
 }

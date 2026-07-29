@@ -14,3 +14,4 @@ field-config.json
 dev_log.txt
 dist_log.txt
 dist_client_log.txt
+data-*.json

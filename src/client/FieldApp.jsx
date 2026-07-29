@@ -625,6 +625,7 @@ export default function FieldApp() {
             windows={windows}
             onToggle={(key) => toggleMinimize(key)}
             onClose={closeWindow}
+            onShutdown={shutdown}
           />
 
           {deskMenu && (

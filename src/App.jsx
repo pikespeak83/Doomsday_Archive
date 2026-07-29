@@ -15,20 +15,44 @@ import TerminalApp from "./components/apps/TerminalApp.jsx";
 import SettingsApp from "./components/apps/SettingsApp.jsx";
 import HelpApp from "./components/apps/HelpApp.jsx";
 import LiveFeedApp from "./components/apps/LiveFeedApp.jsx";
+import CommsApp from "./components/apps/CommsApp.jsx";
+import PersonnelApp from "./components/apps/PersonnelApp.jsx";
+import MissionsApp from "./components/apps/MissionsApp.jsx";
+import ResearchApp from "./components/apps/ResearchApp.jsx";
+import SecurityApp from "./components/apps/SecurityApp.jsx";
+import SatelliteApp from "./components/apps/SatelliteApp.jsx";
+import AssistantApp from "./components/apps/AssistantApp.jsx";
 import FaultyTerminal from "./reactbits/FaultyTerminal.jsx";
 import LetterGlitch from "./reactbits/LetterGlitch.jsx";
 import LineSidebar from "./reactbits/LineSidebar.jsx";
-import { playSound, setSoundsEnabled } from "./lib/sounds.js";
+import { playSound, setSoundsEnabled, setMasterVolume } from "./lib/sounds.js";
 import { THEME_FX, BUNDLED_BACKDROPS } from "./lib/themes.js";
 
 const APPS = [
   { id: "archive", label: "Archive", width: 680 },
+  { id: "comms", label: "Comms", width: 700 },
+  { id: "personnel", label: "Personnel", width: 760 },
+  { id: "missions", label: "Missions", width: 760 },
+  { id: "research", label: "Research", width: 780 },
+  { id: "security", label: "Security", width: 780 },
+  { id: "satellite", label: "Satellite", width: 820 },
+  { id: "oracle", label: "Oracle AI", width: 640 },
   { id: "livefeed", label: "Live Feed", width: 600 },
   { id: "uplink", label: "Uplink", width: 560 },
   { id: "devices", label: "Devices", width: 560 },
-  { id: "terminal", label: "Terminal", width: 620 },
+  { id: "terminal", label: "Terminal", width: 640 },
   { id: "help", label: "Help", width: 580 },
-  { id: "settings", label: "Settings", width: 580 }
+  { id: "settings", label: "Settings", width: 620 }
+];
+
+const AMBIENT_EVENTS = [
+  "SATELLITE LOCK MAINTAINED :: CERBERUS-2",
+  "ARCHIVE INTEGRITY SWEEP COMPLETE :: 0 ERRORS",
+  "PERIMETER SENSORS NOMINAL",
+  "AIRWAVE SCAN :: NO NEW TRANSMISSIONS",
+  "AUX POWER CELLS AT 98%",
+  "THREAT INDEX RECALCULATED :: UNCHANGED",
+  "VAULT ATMOSPHERE :: WITHIN TOLERANCE"
 ];
 
 let toastId = 0;
@@ -42,6 +66,8 @@ export default function App() {
   const [locked, setLocked] = useState(false);
   const [windows, setWindows] = useState([]); // { key, type, appId, media, title, width, minimized }
   const [toasts, setToasts] = useState([]);
+  const [notifHistory, setNotifHistory] = useState([]);
+  const [unread, setUnread] = useState(0);
   const [shuttingDown, setShuttingDown] = useState(false);
   const [deskMenu, setDeskMenu] = useState(null); // { x, y }
   const windowsRef = useRef(windows);
@@ -56,6 +82,7 @@ export default function App() {
         window.archiveApi.getSecurityState()
       ]);
       setSoundsEnabled(cfg.uiSoundsEnabled !== false);
+      setMasterVolume(cfg.soundVolume ?? 1);
       setConfig(cfg);
       setSysInfo(info);
       setLanState(lan);
@@ -96,8 +123,26 @@ export default function App() {
   function pushToast(text, warn = false) {
     const id = ++toastId;
     setToasts((prev) => [...prev.slice(-3), { id, text, warn }]);
+    setNotifHistory((prev) => [...prev.slice(-99), { id, text, warn, time: Date.now() }]);
+    setUnread((prev) => prev + 1);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 6000);
   }
+  const pushToastRef = useRef(pushToast);
+  pushToastRef.current = pushToast;
+
+  // Ambient system heartbeat: rare flavor notifications (roadmap phase 17).
+  useEffect(() => {
+    if (config && config.ambientEventsEnabled === false) return undefined;
+    let timer;
+    function schedule() {
+      timer = setTimeout(() => {
+        pushToastRef.current(AMBIENT_EVENTS[Math.floor(Math.random() * AMBIENT_EVENTS.length)]);
+        schedule();
+      }, 240000 + Math.random() * 300000);
+    }
+    schedule();
+    return () => clearTimeout(timer);
+  }, [config?.ambientEventsEnabled]);
 
   function openApp(appId) {
     playSound("click", 0.4);
@@ -176,6 +221,9 @@ export default function App() {
   const backdrop = config.desktopBackground || "map";
   const theme = config.theme || "green";
   const fx = THEME_FX[theme] || THEME_FX.green;
+  const scanlines = config.scanlinesEnabled !== false;
+  const reduceMotion = config.reduceMotion === true;
+  const shellClass = `os-root ${scanlines ? "crt" : ""} ${reduceMotion ? "reduce-motion" : ""}`;
   const themeClass = theme === "green" ? "" : `theme-${theme}`;
   const bundledBackdrop = BUNDLED_BACKDROPS[backdrop];
   const iconPositions = config.iconPositions || {};
@@ -236,7 +284,7 @@ export default function App() {
 
   if (booted && locked) {
     return (
-      <div className={`os-root crt ${themeClass}`}>
+      <div className={`${shellClass} ${themeClass}`}>
         <LockScreen onUnlocked={() => setLocked(false)} glitchColors={fx.glitch} />
       </div>
     );
@@ -244,13 +292,13 @@ export default function App() {
 
   return (
     <>
-    <div className={`os-root crt ${themeClass} ${shuttingDown ? "powering-off" : ""}`}>
+    <div className={`${shellClass} ${themeClass} ${shuttingDown ? "powering-off" : ""}`}>
       {!booted && (
         <BootScreen hostname={sysInfo.hostname} glitchColors={fx.glitch} onDone={() => setBooted(true)} />
       )}
       <TopBar title="PROJECT CERBERUS" stats={stats} onShutdown={shutdown} />
       <div className="desktop" onContextMenu={onDesktopContext}>
-        {(backdrop === "map" || backdrop === "terminal") && (
+        {(backdrop === "map" || backdrop === "terminal") && !reduceMotion && (
           <div className="desktop-shader">
             <FaultyTerminal
               tint={fx.tint}
@@ -260,7 +308,7 @@ export default function App() {
             />
           </div>
         )}
-        {backdrop === "glitch" && (
+        {backdrop === "glitch" && !reduceMotion && (
           <LetterGlitch className="desktop-shader" glitchColors={fx.glitch} glitchSpeed={75} opacity={0.35} outerVignette />
         )}
         {bundledBackdrop && (
@@ -337,13 +385,22 @@ export default function App() {
                 />
               )}
               {win.appId === "livefeed" && <LiveFeedApp lanState={lanState} />}
+              {win.appId === "comms" && <CommsApp notify={pushToast} onOpenApp={openApp} />}
+              {win.appId === "personnel" && <PersonnelApp notify={pushToast} />}
+              {win.appId === "missions" && <MissionsApp notify={pushToast} />}
+              {win.appId === "research" && <ResearchApp notify={pushToast} onOpenMedia={openMedia} />}
+              {win.appId === "security" && (
+                <SecurityApp lanState={lanState} sysInfo={sysInfo} config={config} notify={pushToast} />
+              )}
+              {win.appId === "satellite" && <SatelliteApp lanState={lanState} notify={pushToast} />}
+              {win.appId === "oracle" && <AssistantApp lanState={lanState} sysInfo={sysInfo} />}
               {win.appId === "devices" && <DevicesApp lanState={lanState} />}
               {win.appId === "uplink" && <UplinkApp lanState={lanState} />}
               {win.appId === "terminal" && (
                 <TerminalApp lanState={lanState} sysInfo={sysInfo} config={config} />
               )}
               {win.appId === "settings" && (
-                <SettingsApp config={config} onConfigChange={setConfig} />
+                <SettingsApp config={config} onConfigChange={setConfig} notify={pushToast} />
               )}
               {win.appId === "help" && <HelpApp sysInfo={sysInfo} />}
             </WindowFrame>
@@ -354,6 +411,11 @@ export default function App() {
           windows={windows}
           onToggle={(key) => toggleMinimize(key)}
           onClose={closeWindow}
+          notifications={notifHistory}
+          unread={unread}
+          onBellOpen={() => setUnread(0)}
+          onClearNotifications={() => { setNotifHistory([]); setUnread(0); }}
+          onShutdown={shutdown}
         />
 
         {deskMenu && (
