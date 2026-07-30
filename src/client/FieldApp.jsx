@@ -27,7 +27,7 @@ import { playSound, setSoundsEnabled } from "../lib/sounds.js";
 import { baseUrl, listFiles, requestAccess, accessState, hostInfo, broadcastState, downloadUrl } from "./api.js";
 
 const FIELD_BOOT_LINES = [
-  "CERBERUS FIELD TERMINAL v1.1.0 :: SECURE KERNEL LOADED",
+  "CERBERUS FIELD TERMINAL v1.2.0 :: SECURE KERNEL LOADED",
   "CHECKING LOCAL HARDWARE ........ OK",
   "UPLINK RECEIVER ................ READY",
   "EXTERNAL NETWORKS .............. SEVERED",
