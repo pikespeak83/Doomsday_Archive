@@ -66,6 +66,7 @@ function sendToRenderer(channel, payload) {
 
 const lan = createLanServer({
   getConfig: () => currentConfig,
+  chatMediaDir: path.join(app.getPath("userData"), "chat-media"),
   saveDevices: (devices) => {
     currentConfig = { ...currentConfig, approvedDevices: devices };
     writeConfig(currentConfig);
@@ -179,9 +180,24 @@ function wakeWindow() {
 }
 
 /** Stream a vault file with HTTP Range support so video seeking works. */
+const MIME_TYPES = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
+  bmp: "image/bmp", svg: "image/svg+xml", ico: "image/x-icon", avif: "image/avif",
+  mp4: "video/mp4", webm: "video/webm", mkv: "video/x-matroska", mov: "video/quicktime", m4v: "video/mp4", avi: "video/x-msvideo",
+  mp3: "audio/mpeg", ogg: "audio/ogg", wav: "audio/wav", flac: "audio/flac", m4a: "audio/mp4", opus: "audio/opus",
+  txt: "text/plain", md: "text/plain", log: "text/plain", json: "application/json", csv: "text/csv",
+  xml: "application/xml", yml: "text/plain", yaml: "text/plain", ini: "text/plain", cfg: "text/plain",
+  html: "text/html", htm: "text/html", pdf: "application/pdf"
+};
+
+function contentTypeFor(abs) {
+  return MIME_TYPES[path.extname(abs).slice(1).toLowerCase()] || "application/octet-stream";
+}
+
 function serveVaultFile(request, abs) {
   const stat = fs.statSync(abs);
   if (!stat.isFile()) return new Response("not a file", { status: 400 });
+  const type = contentTypeFor(abs);
   const range = request.headers.get("range");
   const total = stat.size;
   if (range) {
@@ -194,6 +210,7 @@ function serveVaultFile(request, abs) {
     return new Response(Readable.toWeb(fs.createReadStream(abs, { start, end })), {
       status: 206,
       headers: {
+        "Content-Type": type,
         "Content-Range": `bytes ${start}-${end}/${total}`,
         "Accept-Ranges": "bytes",
         "Content-Length": String(end - start + 1)
@@ -202,7 +219,7 @@ function serveVaultFile(request, abs) {
   }
   return new Response(Readable.toWeb(fs.createReadStream(abs)), {
     status: 200,
-    headers: { "Content-Length": String(total), "Accept-Ranges": "bytes" }
+    headers: { "Content-Type": type, "Content-Length": String(total), "Accept-Ranges": "bytes" }
   });
 }
 
@@ -498,45 +515,128 @@ ipcMain.handle("personnel:pickPhoto", async () => {
   }
 });
 
-// ---- oracle (offline assistant, upgrades itself if a local LLM is running)
+// ---- oracle (offline assistant; local LLM preferred, cloud keys optional)
 
 const ORACLE_URL = "http://127.0.0.1:11434";
+const ORACLE_SYSTEM = "You are ORACLE, the terse AI core of an offline doomsday archive vault called Project Cerberus. Answer in short, clipped, terminal-style sentences. Stay in character.";
+
+async function fetchJson(url, options = {}, timeoutMs = 60000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    const body = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, body };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function ollamaStatus() {
+  try {
+    const res = await fetchJson(`${ORACLE_URL}/api/tags`, {}, 1200);
+    const models = (res.body.models || []).map((m) => m.name);
+    return { online: res.ok && models.length > 0, models };
+  } catch {
+    return { online: false, models: [] };
+  }
+}
+
+async function resolveProvider() {
+  const pref = currentConfig.aiProvider || "auto";
+  const hasOpenai = Boolean(currentConfig.openaiKey);
+  const hasGoogle = Boolean(currentConfig.googleKey);
+  if (pref === "openai") return hasOpenai ? { provider: "openai" } : { provider: "none", reason: "no OpenAI key" };
+  if (pref === "google") return hasGoogle ? { provider: "google" } : { provider: "none", reason: "no Google key" };
+  if (pref === "off") return { provider: "none", reason: "disabled" };
+  const local = await ollamaStatus();
+  if (pref === "ollama") {
+    return local.online ? { provider: "ollama", models: local.models } : { provider: "none", reason: "Ollama not running" };
+  }
+  // auto: local first, then whichever key exists
+  if (local.online) return { provider: "ollama", models: local.models };
+  if (hasOpenai) return { provider: "openai" };
+  if (hasGoogle) return { provider: "google" };
+  return { provider: "none", reason: "no local LLM or API keys" };
+}
 
 ipcMain.handle("oracle:status", async () => {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 1200);
-    const res = await fetch(`${ORACLE_URL}/api/tags`, { signal: controller.signal });
-    clearTimeout(timer);
-    if (!res.ok) return { online: false };
-    const body = await res.json();
-    const models = (body.models || []).map((m) => m.name);
-    return { online: models.length > 0, models };
-  } catch {
-    return { online: false };
-  }
+  const resolved = await resolveProvider();
+  return {
+    online: resolved.provider !== "none",
+    provider: resolved.provider,
+    models: resolved.models || [],
+    model:
+      resolved.provider === "ollama" ? (resolved.models || [])[0]
+      : resolved.provider === "openai" ? (currentConfig.openaiModel || "gpt-4o-mini")
+      : resolved.provider === "google" ? (currentConfig.googleModel || "gemini-2.0-flash")
+      : "",
+    reason: resolved.reason || ""
+  };
 });
 
-ipcMain.handle("oracle:ask", async (_event, prompt, model) => {
+ipcMain.handle("oracle:ask", async (_event, prompt) => {
+  const clean = String(prompt || "").slice(0, 4000);
+  const resolved = await resolveProvider();
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 60000);
-    const res = await fetch(`${ORACLE_URL}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: controller.signal,
-      body: JSON.stringify({
-        model: model,
-        prompt: String(prompt || "").slice(0, 4000),
-        stream: false,
-        options: { num_predict: 400 },
-        system: "You are ORACLE, the terse AI core of an offline doomsday archive vault called Project Cerberus. Answer in short, clipped, terminal-style sentences. Stay in character. Never mention the internet."
-      })
-    });
-    clearTimeout(timer);
-    if (!res.ok) return { ok: false, error: `LLM error ${res.status}` };
-    const body = await res.json();
-    return { ok: true, text: String(body.response || "").trim() };
+    if (resolved.provider === "ollama") {
+      const res = await fetchJson(`${ORACLE_URL}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: (resolved.models || [])[0],
+          prompt: clean,
+          stream: false,
+          options: { num_predict: 400 },
+          system: ORACLE_SYSTEM
+        })
+      });
+      if (!res.ok) return { ok: false, error: `Ollama error ${res.status}` };
+      return { ok: true, text: String(res.body.response || "").trim(), provider: "ollama" };
+    }
+    if (resolved.provider === "openai") {
+      const model = currentConfig.openaiModel || "gpt-4o-mini";
+      const res = await fetchJson("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentConfig.openaiKey}`
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 500,
+          messages: [
+            { role: "system", content: ORACLE_SYSTEM },
+            { role: "user", content: clean }
+          ]
+        })
+      });
+      if (!res.ok) {
+        return { ok: false, error: res.body?.error?.message || `OpenAI error ${res.status}` };
+      }
+      return { ok: true, text: String(res.body.choices?.[0]?.message?.content || "").trim(), provider: "openai" };
+    }
+    if (resolved.provider === "google") {
+      const model = currentConfig.googleModel || "gemini-2.0-flash";
+      const res = await fetchJson(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(currentConfig.googleKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: ORACLE_SYSTEM }] },
+            contents: [{ role: "user", parts: [{ text: clean }] }],
+            generationConfig: { maxOutputTokens: 500 }
+          })
+        }
+      );
+      if (!res.ok) {
+        return { ok: false, error: res.body?.error?.message || `Google error ${res.status}` };
+      }
+      const text = (res.body.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("").trim();
+      return { ok: true, text, provider: "google" };
+    }
+    return { ok: false, error: resolved.reason || "no AI provider available" };
   } catch (err) {
     return { ok: false, error: String(err.message || err) };
   }

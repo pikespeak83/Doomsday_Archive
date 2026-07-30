@@ -16,12 +16,24 @@ const { verifyPassword } = require("./passwordStore");
  *  - the host approves or denies it inside the desktop app
  *  - approved devices receive a bearer token, persisted in config
  */
-function createLanServer({ getConfig, saveDevices, onEvent }) {
+function createLanServer({ getConfig, saveDevices, onEvent, chatMediaDir = path.join(os.tmpdir(), "doomsday-archive-chat") }) {
   let server = null;
   let currentPort = null;
 
   /** Active live feed: { path, name, kind, startedAt } or null. */
   let broadcast = null;
+
+  /** The host app itself authenticates with this rotating loopback token. */
+  const hostToken = crypto.randomUUID();
+
+  /** Chat log (persisted lazily): [{ id, from, text, media, time }] */
+  let chatMessages = [];
+  let chatSeq = 0;
+
+  /** Camera net: feedId -> { id, name, frame: Buffer, updatedAt, startedAt } */
+  const camFeeds = new Map();
+  /** deviceIds whose camera the host has requested */
+  const camRequests = new Set();
 
   /** deviceId -> { id, name, requestedAt, remote } */
   const pending = new Map();
@@ -36,6 +48,9 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
 
   function findByToken(token) {
     if (!token) return null;
+    if (token === hostToken) {
+      return { id: "host", name: os.hostname(), host: true };
+    }
     return approvedList().find((d) => d.token === token) || null;
   }
 
@@ -49,6 +64,22 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
     } catch {
       // renderer might be gone
     }
+  }
+
+  function pushChat(device, text, media) {
+    chatSeq += 1;
+    const message = {
+      id: crypto.randomUUID(),
+      seq: chatSeq,
+      from: { id: device.id, name: device.name },
+      text: text || "",
+      media: media || null,
+      time: Date.now()
+    };
+    chatMessages.push(message);
+    if (chatMessages.length > 500) chatMessages = chatMessages.slice(-400);
+    emit("chat", { message });
+    return message;
   }
 
   function buildApp() {
@@ -148,6 +179,8 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
     app.use("/api/files", requireToken);
     app.use("/api/download", requireToken);
     app.use("/api/broadcast", requireToken);
+    app.use("/api/chat", requireToken);
+    app.use("/api/cam", requireToken);
 
     function requireToken(req, res, next) {
       const token =
@@ -206,6 +239,114 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
         startedAt: broadcast.startedAt,
         serverNow: Date.now()
       });
+    });
+
+    // ---------------------------------------------- chat (text + media)
+
+    app.get("/api/chat/messages", (req, res) => {
+      const after = Number(req.query.after || 0);
+      const messages = after > 0 ? chatMessages.filter((m) => m.seq > after) : chatMessages.slice(-200);
+      res.json({ messages, latest: chatSeq });
+    });
+
+    app.post("/api/chat/send", (req, res) => {
+      const text = String(req.body?.text || "").trim().slice(0, 4000);
+      if (!text) return res.status(400).json({ error: "empty message" });
+      const message = pushChat(req.archiveDevice, text, null);
+      res.json({ ok: true, message });
+    });
+
+    app.post("/api/chat/upload", express.raw({ type: () => true, limit: "25mb" }), (req, res) => {
+      try {
+        const name = String(req.query.name || "file").replace(/[<>:"/\\|?*\x00-\x1f]/g, "").slice(0, 120) || "file";
+        const buf = req.body;
+        if (!buf || !buf.length) return res.status(400).json({ error: "empty upload" });
+        fs.mkdirSync(chatMediaDir, { recursive: true });
+        const id = crypto.randomUUID();
+        const ext = path.extname(name).toLowerCase();
+        fs.writeFileSync(path.join(chatMediaDir, id + ext), buf);
+        const kind = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"].includes(ext) ? "image"
+          : [".mp4", ".webm", ".mov", ".m4v"].includes(ext) ? "video"
+          : [".mp3", ".ogg", ".wav", ".m4a", ".flac", ".opus"].includes(ext) ? "audio"
+          : "file";
+        const media = { id: id + ext, name, kind, size: buf.length };
+        const text = String(req.query.text || "").trim().slice(0, 4000);
+        const message = pushChat(req.archiveDevice, text, media);
+        res.json({ ok: true, message });
+      } catch (err) {
+        res.status(500).json({ error: String(err.message || err) });
+      }
+    });
+
+    app.get("/api/chat/media/:id", (req, res) => {
+      const id = String(req.params.id || "").replace(/[^a-z0-9.-]/gi, "");
+      if (!id || id.includes("..")) return res.status(404).json({ error: "gone" });
+      const file = path.join(chatMediaDir, id);
+      if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return res.status(404).json({ error: "gone" });
+      res.sendFile(file);
+    });
+
+    // ---------------------------------------------- camera net
+
+    app.post("/api/cam/frame", express.raw({ type: () => true, limit: "1mb" }), (req, res) => {
+      const dev = req.archiveDevice;
+      if (!req.body || !req.body.length) return res.status(400).json({ error: "no frame" });
+      const existing = camFeeds.get(dev.id);
+      camFeeds.set(dev.id, {
+        id: dev.id,
+        name: dev.name,
+        frame: req.body,
+        updatedAt: Date.now(),
+        startedAt: existing?.startedAt || Date.now()
+      });
+      if (camRequests.has(dev.id)) camRequests.delete(dev.id);
+      if (!existing) emit("cam", { active: true, device: { id: dev.id, name: dev.name } });
+      res.json({ ok: true });
+    });
+
+    app.post("/api/cam/stop", (req, res) => {
+      const dev = req.archiveDevice;
+      if (camFeeds.delete(dev.id)) {
+        emit("cam", { active: false, device: { id: dev.id, name: dev.name } });
+      }
+      res.json({ ok: true });
+    });
+
+    app.get("/api/cam/list", (req, res) => {
+      const now = Date.now();
+      for (const [id, feed] of camFeeds) {
+        if (now - feed.updatedAt > 12_000) {
+          camFeeds.delete(id);
+          emit("cam", { active: false, device: { id: feed.id, name: feed.name } });
+        }
+      }
+      res.json({
+        feeds: [...camFeeds.values()].map(({ frame, ...meta }) => meta),
+        requested: camRequests.has(req.archiveDevice.id),
+        serverNow: now
+      });
+    });
+
+    app.get("/api/cam/frame", (req, res) => {
+      const feed = camFeeds.get(String(req.query.feed || ""));
+      if (!feed) return res.status(404).json({ error: "no feed" });
+      res.setHeader("Content-Type", "image/jpeg");
+      res.setHeader("Cache-Control", "no-store");
+      res.send(feed.frame);
+    });
+
+    app.post("/api/cam/request", (req, res) => {
+      if (req.archiveDevice.id !== "host") return res.status(403).json({ error: "host only" });
+      const deviceId = String(req.body?.deviceId || "");
+      if (!findApproved(deviceId)) return res.status(404).json({ error: "unknown device" });
+      camRequests.add(deviceId);
+      res.json({ ok: true });
+    });
+
+    app.post("/api/cam/decline", (req, res) => {
+      camRequests.delete(req.archiveDevice.id);
+      emit("cam-declined", { device: { id: req.archiveDevice.id, name: req.archiveDevice.name } });
+      res.json({ ok: true });
     });
 
     app.use((_req, res) => res.status(404).json({ error: "not found" }));
@@ -303,12 +444,14 @@ function createLanServer({ getConfig, saveDevices, onEvent }) {
     return {
       running: Boolean(server),
       port: currentPort || cfg.port,
+      hostToken,
       interfaces: interfaces(),
       pending: [...pending.values()],
       approved: approvedList().map(({ token, ...rest }) => rest),
       archiveSources: cfg.archiveSources || [],
       sourceStats: sourceStats(cfg.archiveSources),
       allowDownloads: cfg.allowDownloads !== false,
+      cams: [...camFeeds.values()].map(({ frame, ...meta }) => meta),
       broadcast: broadcast
         ? { active: true, name: broadcast.name, path: broadcast.path, kind: broadcast.kind, startedAt: broadcast.startedAt }
         : { active: false }

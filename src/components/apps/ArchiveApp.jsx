@@ -63,15 +63,14 @@ export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBro
       void load(rel);
       return;
     }
-    if (VIEWABLE.includes(entry.kind)) {
-      onOpenMedia({
-        kind: entry.kind,
-        name: entry.name,
-        src: `vault://${rel.split("/").map(encodeURIComponent).join("/")}`
-      });
-    } else {
-      void window.archiveApi.openFile(rel);
-    }
+    const src = `vault://${rel.split("/").map(encodeURIComponent).join("/")}`;
+    const ext = (entry.ext || "").toLowerCase();
+    const kind = VIEWABLE.includes(entry.kind)
+      ? entry.kind
+      : ext === "pdf" || ext === "html" || ext === "htm"
+        ? "pdf"
+        : "binary";
+    onOpenMedia({ kind, name: entry.name, src, rel });
   }
 
   async function doOp(promise, refresh = true) {
@@ -98,7 +97,7 @@ export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBro
     const rel = relOf(entry);
     const items = [];
     items.push({ label: entry.type === "file" ? "OPEN" : "EXPLORE", onClick: () => openEntry(entry) });
-    if (entry.type === "file" && VIEWABLE.includes(entry.kind)) {
+    if (entry.type === "file") {
       items.push({ label: "OPEN WITH SYSTEM APP", onClick: () => window.archiveApi.openFile(rel) });
     }
     if (entry.type === "file" && (entry.kind === "video" || entry.kind === "audio")) {

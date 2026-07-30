@@ -82,10 +82,16 @@ export default function RemoteArchiveApp({ connection, config, onAuthLost, onOpe
                   if (entry.type !== "file") {
                     playSound("click", 0.35);
                     void load(rel);
-                  } else if (VIEWABLE.includes(entry.kind)) {
+                  } else {
                     playSound("select", 0.4);
+                    const ext = (entry.ext || "").toLowerCase();
+                    const kind = VIEWABLE.includes(entry.kind)
+                      ? entry.kind
+                      : ext === "pdf" || ext === "html" || ext === "htm"
+                        ? "pdf"
+                        : "binary";
                     onOpenMedia({
-                      kind: entry.kind,
+                      kind,
                       name: entry.name,
                       src: downloadUrl(base, config.token, rel, true)
                     });

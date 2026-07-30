@@ -20,7 +20,7 @@ export default function AssistantApp({ lanState, sysInfo }) {
   const [messages, setMessages] = useState([BOOT_MSG]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [llm, setLlm] = useState({ online: false, models: [] });
+  const [llm, setLlm] = useState({ online: false, provider: "none", model: "", reason: "" });
   const logRef = useRef(null);
 
   useEffect(() => {
@@ -89,17 +89,17 @@ export default function AssistantApp({ lanState, sysInfo }) {
           `UPLINK: ${lanState?.running ? `ACTIVE :${lanState.port}` : "OFFLINE"}`,
           `VAULT: ${lanState?.archiveSources?.length || 0} source(s)`,
           `FIELD UNITS: ${lanState?.approved?.length || 0} cleared`,
-          `LLM CORE: ${llm.online ? `LINKED (${llm.models[0]})` : "OFFLINE HEURISTICS"}`
+          `AI CORE: ${llm.online ? `${llm.provider.toUpperCase()} (${llm.model})` : "OFFLINE HEURISTICS"}`
         ].join("\n"));
         return;
       }
 
-      if (llm.online && llm.models[0]) {
-        const res = await window.archiveApi.oracleAsk(text, llm.models[0]);
+      if (llm.online) {
+        const res = await window.archiveApi.oracleAsk(text);
         if (res.ok && res.text) {
           push("oracle", res.text);
         } else {
-          push("oracle", `LLM core faulted (${res.error || "unknown"}). Falling back to instinct: ${CANNED[Math.floor(Math.random() * CANNED.length)]}`);
+          push("oracle", `AI core faulted (${res.error || "unknown"}). Falling back to instinct: ${CANNED[Math.floor(Math.random() * CANNED.length)]}`);
         }
         return;
       }
@@ -116,8 +116,8 @@ export default function AssistantApp({ lanState, sysInfo }) {
         <span className={`status-led ${llm.online ? "ok" : ""}`} />
         <span className="dim" style={{ fontSize: 11 }}>
           {llm.online
-            ? `LOCAL LLM LINKED :: ${llm.models[0]} (offline, via Ollama)`
-            : "HEURISTIC CORE :: no local LLM detected (install Ollama to upgrade ORACLE, still fully offline)"}
+            ? `AI CORE :: ${llm.provider.toUpperCase()} :: ${llm.model}`
+            : `HEURISTIC CORE :: ${llm.reason || "no AI provider"} (configure one in SETTINGS > AI)`}
         </span>
       </div>
       <div className="chat-log" ref={logRef}>

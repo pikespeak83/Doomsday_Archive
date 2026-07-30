@@ -60,6 +60,12 @@ const hostDefaults = {
   reduceMotion: false,
   /** Occasional ambient flavor notifications. */
   ambientEventsEnabled: true,
+  /** ORACLE AI provider: auto | ollama | openai | google | off. */
+  aiProvider: "auto",
+  openaiKey: "",
+  openaiModel: "gpt-4o-mini",
+  googleKey: "",
+  googleModel: "gemini-2.0-flash",
   /** scrypt hash of the vault passphrase; empty = no passphrase. */
   passwordHash: "",
   passwordSalt: "",

@@ -336,20 +336,24 @@ body {
   pointer-events: none;
 }
 
-/* desktop icon column */
+/* desktop icon grid: fixed cells, columns fill from the right edge */
 .icon-column {
   position: absolute;
   top: 26px;
-  right: 22px;
-  bottom: 120px;
-  display: flex;
-  flex-direction: column;
-  flex-wrap: wrap-reverse;
-  align-content: flex-end;
-  column-gap: 14px;
-  gap: 22px 14px;
+  right: 14px;
+  bottom: 130px;
+  left: 90px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(auto-fill, 118px);
+  grid-auto-columns: 104px;
+  direction: rtl;
+  justify-content: start;
+  align-content: start;
   z-index: 10;
+  pointer-events: none;
 }
+.icon-column .desk-icon { direction: ltr; pointer-events: auto; justify-self: center; align-self: start; }
 .desk-icon {
   width: 92px;
   display: flex;
@@ -1266,4 +1270,156 @@ body {
 .boot-seal.video {
   animation: sealIn 0.9s ease forwards;
   object-fit: cover;
+}
+
+/* pdf/html frame + hex dump viewers */
+.viewer-frame {
+  width: 100%;
+  height: 62vh;
+  border: 1px solid var(--green-faint);
+  background: #1a1a1a;
+}
+.viewer-text.hex {
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 48vh;
+}
+
+/* ------------------------------------------------ calculator */
+.calc {
+  width: 100%;
+  max-width: 280px;
+  margin: 0 auto;
+}
+.calc-screen {
+  border: 1px solid var(--green-dim);
+  background: rgba(0, 0, 0, 0.5);
+  padding: 10px 12px;
+  text-align: right;
+  font-family: var(--font-display);
+  font-size: 30px;
+  color: var(--green-bright);
+  overflow: hidden;
+  white-space: nowrap;
+  margin-bottom: 4px;
+}
+.calc-tape {
+  min-height: 16px;
+  font-size: 11px;
+  color: var(--green-dim);
+  text-align: right;
+  margin-bottom: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.calc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.calc-key {
+  border: 1px solid var(--green-faint);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  padding: 12px 0;
+  cursor: pointer;
+}
+.calc-key:hover { border-color: var(--green); background: var(--green-dark); }
+.calc-key.op { color: var(--green-bright); }
+.calc-key.eq { background: var(--green-dark); border-color: var(--green); color: var(--green-bright); }
+.calc-key.danger { color: var(--red); }
+
+/* ------------------------------------------------ snake */
+.snake-wrap { text-align: center; }
+.snake-board {
+  display: block;
+  margin: 0 auto;
+  border: 1px solid var(--green-dim);
+  background: rgba(0, 0, 0, 0.55);
+  image-rendering: pixelated;
+}
+.snake-hud {
+  display: flex;
+  justify-content: space-between;
+  max-width: 420px;
+  margin: 0 auto 8px;
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+
+/* ------------------------------------------------ chat */
+.chatnet-log {
+  height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--green-faint);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 10px;
+  margin-bottom: 8px;
+}
+.chatnet-msg { margin-bottom: 10px; }
+.chatnet-head { font-size: 11px; color: var(--green-dim); letter-spacing: 1px; }
+.chatnet-head .who { color: var(--green-bright); }
+.chatnet-body { white-space: pre-wrap; word-break: break-word; font-size: 13px; margin-top: 2px; }
+.chatnet-media img, .chatnet-media video {
+  max-width: 320px;
+  max-height: 220px;
+  border: 1px solid var(--green-faint);
+  display: block;
+  margin-top: 4px;
+  cursor: pointer;
+}
+.chatnet-media audio { display: block; margin-top: 4px; width: 300px; }
+.chatnet-file {
+  display: inline-block;
+  border: 1px dashed var(--green-dim);
+  padding: 4px 8px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--green-bright);
+}
+
+/* ------------------------------------------------ camera net */
+.camnet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+.camnet-tile {
+  position: relative;
+  border: 1px solid var(--green-faint);
+  background: #000;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+}
+.camnet-tile video, .camnet-tile img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.camnet-label {
+  position: absolute;
+  left: 6px;
+  bottom: 4px;
+  z-index: 2;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--green-bright);
+  text-shadow: 0 0 4px #000;
+}
+.camnet-live {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--red);
+  border: 1px solid var(--red);
+  padding: 1px 5px;
+  background: rgba(0, 0, 0, 0.55);
+  animation: pulseBadge 1.4s ease-in-out infinite;
 }

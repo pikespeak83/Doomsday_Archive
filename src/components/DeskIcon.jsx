@@ -3,10 +3,10 @@ import FolderIcon from "./FolderIcon.jsx";
 
 /**
  * Desktop folder icon: click to open, drag to reposition (Windows style).
- * Icons without a stored position live in the right-hand column; once
- * dragged they become free-floating and the position is persisted.
+ * Drops report the raw point; the shell snaps it to the grid. Right-click
+ * opens the icon menu (open / rename / reset position).
  */
-export default function DeskIcon({ label, pos, onOpen, onMove }) {
+export default function DeskIcon({ label, pos, onOpen, onMove, onMenu }) {
   const [drag, setDrag] = useState(null); // { dx, dy }
   const info = useRef(null);
 
@@ -44,9 +44,9 @@ export default function DeskIcon({ label, pos, onOpen, onMove }) {
     const desk = e.currentTarget.closest(".desktop");
     if (!desk) return;
     const rect = desk.getBoundingClientRect();
-    const x = Math.max(4, Math.min(rect.width - 96, e.clientX - rect.left - i.grabX));
-    const y = Math.max(4, Math.min(rect.height - 104, e.clientY - rect.top - i.grabY));
-    onMove({ x: Math.round(x), y: Math.round(y) });
+    const x = Math.max(4, Math.min(rect.width - 100, e.clientX - rect.left - i.grabX));
+    const y = Math.max(4, Math.min(rect.height - 130, e.clientY - rect.top - i.grabY));
+    onMove({ x: Math.round(x), y: Math.round(y) }, rect.height);
   }
 
   return (
@@ -59,6 +59,12 @@ export default function DeskIcon({ label, pos, onOpen, onMove }) {
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={up}
+      onContextMenu={(e) => {
+        if (!onMenu) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onMenu({ x: e.clientX, y: e.clientY });
+      }}
     >
       <FolderIcon />
       <span>{label}</span>

@@ -22,15 +22,22 @@ import ResearchApp from "./components/apps/ResearchApp.jsx";
 import SecurityApp from "./components/apps/SecurityApp.jsx";
 import SatelliteApp from "./components/apps/SatelliteApp.jsx";
 import AssistantApp from "./components/apps/AssistantApp.jsx";
+import CalculatorApp from "./components/apps/CalculatorApp.jsx";
+import SnakeApp from "./components/apps/SnakeApp.jsx";
+import ChatNetApp from "./components/apps/ChatNetApp.jsx";
+import CameraNetApp from "./components/apps/CameraNetApp.jsx";
 import FaultyTerminal from "./reactbits/FaultyTerminal.jsx";
 import LetterGlitch from "./reactbits/LetterGlitch.jsx";
 import LineSidebar from "./reactbits/LineSidebar.jsx";
 import { playSound, setSoundsEnabled, setMasterVolume } from "./lib/sounds.js";
 import { THEME_FX, BUNDLED_BACKDROPS, THEME_CHOICES } from "./lib/themes.js";
+import { snapToGrid } from "./lib/deskGrid.js";
 
 const APPS = [
   { id: "archive", label: "Archive", width: 680 },
   { id: "comms", label: "Comms", width: 700 },
+  { id: "chat", label: "Chat", width: 660 },
+  { id: "cameras", label: "Cameras", width: 840 },
   { id: "personnel", label: "Personnel", width: 760 },
   { id: "missions", label: "Missions", width: 760 },
   { id: "research", label: "Research", width: 780 },
@@ -41,6 +48,8 @@ const APPS = [
   { id: "uplink", label: "Uplink", width: 560 },
   { id: "devices", label: "Devices", width: 560 },
   { id: "terminal", label: "Terminal", width: 640 },
+  { id: "calc", label: "Calculator", width: 340 },
+  { id: "snake", label: "Serpent", width: 500 },
   { id: "help", label: "Help", width: 580 },
   { id: "settings", label: "Settings", width: 620 }
 ];
@@ -70,6 +79,7 @@ export default function App() {
   const [unread, setUnread] = useState(0);
   const [shuttingDown, setShuttingDown] = useState(false);
   const [deskMenu, setDeskMenu] = useState(null); // { x, y }
+  const [iconMenu, setIconMenu] = useState(null); // { x, y, appId }
   const windowsRef = useRef(windows);
   windowsRef.current = windows;
 
@@ -112,6 +122,17 @@ export default function App() {
         pushToast(`UPDATE ${event.version} RETRIEVED. RESTARTING NODE...`);
       } else if (event.type === "broadcast") {
         pushToast(event.active ? `LIVE FEED STARTED: ${event.name}` : "LIVE FEED ENDED");
+      } else if (event.type === "chat") {
+        if (event.message?.from?.id !== "host") {
+          playSound("notify", 0.3);
+          pushToast(`CHAT :: ${event.message?.from?.name}: ${String(event.message?.text || event.message?.media?.name || "").slice(0, 60)}`);
+        }
+      } else if (event.type === "cam") {
+        if (event.device?.id !== "host") {
+          pushToast(event.active ? `CAMERA ONLINE :: ${event.device?.name}` : `CAMERA OFFLINE :: ${event.device?.name}`);
+        }
+      } else if (event.type === "cam-declined") {
+        pushToast(`CAMERA REQUEST DECLINED :: ${event.device?.name}`, true);
       }
     });
     return () => {
@@ -228,11 +249,37 @@ export default function App() {
   const bundledBackdrop = BUNDLED_BACKDROPS[backdrop];
   const iconPositions = config.iconPositions || {};
 
-  async function moveIcon(appId, pos) {
+  async function moveIcon(appId, pos, deskHeight) {
+    const others = Object.entries(config.iconPositions || {})
+      .filter(([id]) => id !== appId)
+      .map(([, p]) => p);
+    const snapped = snapToGrid(pos, others, deskHeight);
     const next = await window.archiveApi.saveConfig({
-      iconPositions: { ...(config.iconPositions || {}), [appId]: pos }
+      iconPositions: { ...(config.iconPositions || {}), [appId]: snapped }
     });
     setConfig(next);
+  }
+
+  async function renameIcon(appId) {
+    const meta = APPS.find((a) => a.id === appId);
+    const current = (config.iconNames || {})[appId] || meta?.label || "";
+    const name = window.prompt("Icon name:", current);
+    if (name === null) return;
+    const clean = name.trim().slice(0, 24);
+    const iconNames = { ...(config.iconNames || {}) };
+    if (!clean || clean === meta?.label) delete iconNames[appId];
+    else iconNames[appId] = clean;
+    setConfig(await window.archiveApi.saveConfig({ iconNames }));
+  }
+
+  async function resetIconPos(appId) {
+    const iconPositions = { ...(config.iconPositions || {}) };
+    delete iconPositions[appId];
+    setConfig(await window.archiveApi.saveConfig({ iconPositions }));
+  }
+
+  function iconLabel(app) {
+    return (config.iconNames || {})[app.id] || app.label;
   }
 
   async function setTheme(value) {
@@ -346,20 +393,22 @@ export default function App() {
           {APPS.filter((app) => !iconPositions[app.id]).map((app) => (
             <DeskIcon
               key={app.id}
-              label={app.label}
+              label={iconLabel(app)}
               pos={null}
               onOpen={() => openApp(app.id)}
-              onMove={(pos) => moveIcon(app.id, pos)}
+              onMove={(pos, deskH) => moveIcon(app.id, pos, deskH)}
+              onMenu={(at) => setIconMenu({ ...at, appId: app.id })}
             />
           ))}
         </div>
         {APPS.filter((app) => iconPositions[app.id]).map((app) => (
           <DeskIcon
             key={app.id}
-            label={app.label}
+            label={iconLabel(app)}
             pos={iconPositions[app.id]}
             onOpen={() => openApp(app.id)}
-            onMove={(pos) => moveIcon(app.id, pos)}
+            onMove={(pos, deskH) => moveIcon(app.id, pos, deskH)}
+            onMenu={(at) => setIconMenu({ ...at, appId: app.id })}
           />
         ))}
 
@@ -395,6 +444,35 @@ export default function App() {
               )}
               {win.appId === "satellite" && <SatelliteApp lanState={lanState} notify={pushToast} />}
               {win.appId === "oracle" && <AssistantApp lanState={lanState} sysInfo={sysInfo} />}
+              {win.appId === "calc" && <CalculatorApp />}
+              {win.appId === "snake" && <SnakeApp />}
+              {win.appId === "chat" && (
+                lanState?.running && lanState?.hostToken ? (
+                  <ChatNetApp
+                    base={`http://127.0.0.1:${lanState.port || 8737}`}
+                    token={lanState.hostToken}
+                    selfId="host"
+                    onOpenMedia={openMedia}
+                    notify={pushToast}
+                  />
+                ) : (
+                  <p className="warn">THE UPLINK IS OFFLINE. START IT IN SETTINGS &gt; NETWORK.</p>
+                )
+              )}
+              {win.appId === "cameras" && (
+                lanState?.running && lanState?.hostToken ? (
+                  <CameraNetApp
+                    base={`http://127.0.0.1:${lanState.port || 8737}`}
+                    token={lanState.hostToken}
+                    selfId="host"
+                    isHost
+                    devices={lanState?.approved || []}
+                    notify={pushToast}
+                  />
+                ) : (
+                  <p className="warn">THE UPLINK IS OFFLINE. START IT IN SETTINGS &gt; NETWORK.</p>
+                )
+              )}
               {win.appId === "devices" && <DevicesApp lanState={lanState} />}
               {win.appId === "uplink" && <UplinkApp lanState={lanState} />}
               {win.appId === "terminal" && (
@@ -425,6 +503,18 @@ export default function App() {
             y={deskMenu.y}
             items={deskMenuItems}
             onClose={() => setDeskMenu(null)}
+          />
+        )}
+        {iconMenu && (
+          <ContextMenu
+            x={iconMenu.x}
+            y={iconMenu.y}
+            items={[
+              { label: "OPEN", onClick: () => openApp(iconMenu.appId) },
+              { label: "RENAME", onClick: () => renameIcon(iconMenu.appId) },
+              { label: "RESET POSITION", onClick: () => resetIconPos(iconMenu.appId) }
+            ]}
+            onClose={() => setIconMenu(null)}
           />
         )}
       </div>

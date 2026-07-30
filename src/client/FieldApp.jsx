@@ -17,7 +17,12 @@ import FieldHelpApp from "./apps/FieldHelpApp.jsx";
 import FieldLiveFeed from "./FieldLiveFeed.jsx";
 import MediaViewer from "../components/MediaViewer.jsx";
 import TaskBar from "../components/TaskBar.jsx";
+import ChatNetApp from "../components/apps/ChatNetApp.jsx";
+import CameraNetApp from "../components/apps/CameraNetApp.jsx";
+import CalculatorApp from "../components/apps/CalculatorApp.jsx";
+import SnakeApp from "../components/apps/SnakeApp.jsx";
 import { THEME_FX, BUNDLED_BACKDROPS, THEME_CHOICES } from "../lib/themes.js";
+import { snapToGrid } from "../lib/deskGrid.js";
 import { playSound, setSoundsEnabled } from "../lib/sounds.js";
 import { baseUrl, listFiles, requestAccess, accessState, hostInfo, broadcastState, downloadUrl } from "./api.js";
 
@@ -31,7 +36,11 @@ const FIELD_BOOT_LINES = [
 
 const APPS = [
   { id: "archive", label: "Archive", width: 640 },
+  { id: "chat", label: "Chat", width: 660 },
+  { id: "cameras", label: "Cameras", width: 800 },
   { id: "uplink", label: "Uplink", width: 540 },
+  { id: "calc", label: "Calculator", width: 340 },
+  { id: "snake", label: "Serpent", width: 500 },
   { id: "help", label: "Help", width: 560 },
   { id: "settings", label: "Settings", width: 520 }
 ];
@@ -58,6 +67,7 @@ export default function FieldApp() {
   const [toasts, setToasts] = useState([]);
   const [shuttingDown, setShuttingDown] = useState(false);
   const [deskMenu, setDeskMenu] = useState(null); // { x, y }
+  const [iconMenu, setIconMenu] = useState(null); // { x, y, appId }
   const pollRef = useRef(null);
   const feedPollRef = useRef(null);
   const feedKeyRef = useRef(null);
@@ -109,6 +119,7 @@ export default function FieldApp() {
     if (phase !== "desktop" || !connection) return;
     const base = baseUrl(connection.address, connection.port);
     let lastActivePath = null;
+    let camPrompted = false;
     const poll = async () => {
       try {
         const res = await broadcastState(base, config.token);
@@ -130,6 +141,23 @@ export default function FieldApp() {
           lastActivePath = null;
           closeFeedWindow();
           pushToast("LIVE FEED ENDED BY HOST");
+        }
+        // camera request check rides the same poll
+        try {
+          const camRes = await fetch(`${base}/api/cam/list`, { headers: { "x-archive-token": config.token } });
+          if (camRes.ok) {
+            const cam = await camRes.json();
+            if (cam.requested && !camPrompted) {
+              camPrompted = true;
+              playSound("alert", 0.55);
+              pushToast("HOST NODE REQUESTS YOUR CAMERA :: OPEN CAMERAS");
+              openApp("cameras");
+            } else if (!cam.requested) {
+              camPrompted = false;
+            }
+          }
+        } catch {
+          // relay hiccup
         }
       } catch {
         // host unreachable; uplink app handles that
@@ -351,11 +379,36 @@ export default function FieldApp() {
   const bundledBackdrop = BUNDLED_BACKDROPS[backdrop];
   const iconPositions = config.iconPositions || {};
 
-  async function moveIcon(appId, pos) {
-    const next = await window.fieldApi.saveConfig({
-      iconPositions: { ...(config.iconPositions || {}), [appId]: pos }
-    });
-    setConfig(next);
+  async function moveIcon(appId, pos, deskHeight) {
+    const others = Object.entries(config.iconPositions || {})
+      .filter(([id]) => id !== appId)
+      .map(([, p]) => p);
+    const snapped = snapToGrid(pos, others, deskHeight);
+    setConfig(await window.fieldApi.saveConfig({
+      iconPositions: { ...(config.iconPositions || {}), [appId]: snapped }
+    }));
+  }
+
+  async function renameIcon(appId) {
+    const meta = APPS.find((a) => a.id === appId);
+    const current = (config.iconNames || {})[appId] || meta?.label || "";
+    const name = window.prompt("Icon name:", current);
+    if (name === null) return;
+    const clean = name.trim().slice(0, 24);
+    const iconNames = { ...(config.iconNames || {}) };
+    if (!clean || clean === meta?.label) delete iconNames[appId];
+    else iconNames[appId] = clean;
+    setConfig(await window.fieldApi.saveConfig({ iconNames }));
+  }
+
+  async function resetIconPos(appId) {
+    const iconPositionsNext = { ...(config.iconPositions || {}) };
+    delete iconPositionsNext[appId];
+    setConfig(await window.fieldApi.saveConfig({ iconPositions: iconPositionsNext }));
+  }
+
+  function iconLabel(app) {
+    return (config.iconNames || {})[app.id] || app.label;
   }
 
   async function setTheme(value) {
@@ -564,20 +617,22 @@ export default function FieldApp() {
             {APPS.filter((app) => !iconPositions[app.id]).map((app) => (
               <DeskIcon
                 key={app.id}
-                label={app.label}
+                label={iconLabel(app)}
                 pos={null}
                 onOpen={() => openApp(app.id)}
-                onMove={(pos) => moveIcon(app.id, pos)}
+                onMove={(pos, deskH) => moveIcon(app.id, pos, deskH)}
+                onMenu={(at) => setIconMenu({ ...at, appId: app.id })}
               />
             ))}
           </div>
           {APPS.filter((app) => iconPositions[app.id]).map((app) => (
             <DeskIcon
               key={app.id}
-              label={app.label}
+              label={iconLabel(app)}
               pos={iconPositions[app.id]}
               onOpen={() => openApp(app.id)}
-              onMove={(pos) => moveIcon(app.id, pos)}
+              onMove={(pos, deskH) => moveIcon(app.id, pos, deskH)}
+              onMenu={(at) => setIconMenu({ ...at, appId: app.id })}
             />
           ))}
 
@@ -614,6 +669,26 @@ export default function FieldApp() {
                 {win.appId === "uplink" && (
                   <FieldUplinkApp connection={connection} onDisconnect={disconnect} />
                 )}
+                {win.appId === "chat" && (
+                  <ChatNetApp
+                    base={baseUrl(connection.address, connection.port)}
+                    token={config.token}
+                    selfId={config.deviceId}
+                    onOpenMedia={openMedia}
+                    notify={pushToast}
+                  />
+                )}
+                {win.appId === "cameras" && (
+                  <CameraNetApp
+                    base={baseUrl(connection.address, connection.port)}
+                    token={config.token}
+                    selfId={config.deviceId}
+                    isHost={false}
+                    notify={pushToast}
+                  />
+                )}
+                {win.appId === "calc" && <CalculatorApp />}
+                {win.appId === "snake" && <SnakeApp />}
                 {win.appId === "settings" && (
                   <FieldSettingsApp config={config} onConfigChange={setConfig} />
                 )}
@@ -635,6 +710,18 @@ export default function FieldApp() {
               y={deskMenu.y}
               items={deskMenuItems}
               onClose={() => setDeskMenu(null)}
+            />
+          )}
+          {iconMenu && (
+            <ContextMenu
+              x={iconMenu.x}
+              y={iconMenu.y}
+              items={[
+                { label: "OPEN", onClick: () => openApp(iconMenu.appId) },
+                { label: "RENAME", onClick: () => renameIcon(iconMenu.appId) },
+                { label: "RESET POSITION", onClick: () => resetIconPos(iconMenu.appId) }
+              ]}
+              onClose={() => setIconMenu(null)}
             />
           )}
         </div>

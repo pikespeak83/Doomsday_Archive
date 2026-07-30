@@ -8,7 +8,7 @@ function fmtGb(bytes) {
   return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
 }
 
-const TABS = ["STORAGE", "NETWORK", "GRAPHICS", "AUDIO", "SYSTEM", "SECURITY"];
+const TABS = ["STORAGE", "NETWORK", "GRAPHICS", "AUDIO", "AI", "SYSTEM", "SECURITY"];
 
 /** Tabbed settings: storage, network, graphics, audio, system, security. */
 export default function SettingsApp({ config, onConfigChange, notify }) {
@@ -264,6 +264,59 @@ export default function SettingsApp({ config, onConfigChange, notify }) {
             }}
             onMouseUp={() => playSound("click", 0.5)}
           />
+        </>
+      )}
+
+      {tab === "AI" && (
+        <>
+          <div className="field-label" style={{ marginTop: 0 }}>ORACLE AI PROVIDER</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[
+              ["auto", "AUTO"],
+              ["ollama", "OLLAMA (LOCAL)"],
+              ["openai", "OPENAI"],
+              ["google", "GOOGLE"],
+              ["off", "OFF"]
+            ].map(([value, label]) => (
+              <button key={value}
+                className={`btn small ${(config.aiProvider || "auto") === value ? "" : "ghost"}`}
+                onClick={() => { playSound("toggle", 0.4); void save({ aiProvider: value }); }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+            AUTO prefers a local Ollama model (fully offline), then falls back to whichever
+            cloud key is set. Cloud providers only work while the grid is up.
+          </p>
+
+          <div className="field-label">OPENAI API KEY</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input className="text-input" type="password" style={{ flex: 1 }}
+              placeholder="sk-..."
+              value={config.openaiKey || ""}
+              onChange={(e) => save({ openaiKey: e.target.value.trim() })} />
+            <input className="text-input" style={{ width: 160 }}
+              title="OpenAI model"
+              value={config.openaiModel || "gpt-4o-mini"}
+              onChange={(e) => save({ openaiModel: e.target.value.trim() })} />
+          </div>
+
+          <div className="field-label">GOOGLE AI API KEY</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input className="text-input" type="password" style={{ flex: 1 }}
+              placeholder="AIza..."
+              value={config.googleKey || ""}
+              onChange={(e) => save({ googleKey: e.target.value.trim() })} />
+            <input className="text-input" style={{ width: 160 }}
+              title="Google model"
+              value={config.googleModel || "gemini-2.0-flash"}
+              onChange={(e) => save({ googleModel: e.target.value.trim() })} />
+          </div>
+          <p className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+            Keys are stored locally in this node's config file and never leave the machine
+            except to call the provider you selected.
+          </p>
         </>
       )}
 

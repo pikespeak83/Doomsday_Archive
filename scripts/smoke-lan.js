@@ -77,6 +77,68 @@ srv.start(8737).then(async (state) => {
   const feedOff = await fetch(`http://127.0.0.1:8737/api/broadcast/state?token=${dev.token}`).then((r) => r.json());
   console.log("broadcast off:", feedOff.active === false);
 
+  // ---- chat
+  const hostToken = srv.getState().hostToken;
+  const sent = await fetch(`http://127.0.0.1:8737/api/chat/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-archive-token": dev.token }, 
+    body: JSON.stringify({ text: "hello from the field" })
+  }).then((r) => r.json());
+  console.log("chat send ok:", sent.ok === true);
+  const hostSent = await fetch(`http://127.0.0.1:8737/api/chat/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-archive-token": hostToken },
+    body: JSON.stringify({ text: "copy that, host reading you" })
+  }).then((r) => r.json());
+  console.log("host chat via hostToken:", hostSent.ok === true, "from:", hostSent.message?.from?.id);
+  const up = await fetch(`http://127.0.0.1:8737/api/chat/upload?name=note.txt&text=attached`, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream", "x-archive-token": dev.token },
+    body: Buffer.from("survival note")
+  }).then((r) => r.json());
+  console.log("chat upload:", up.ok === true, "kind:", up.message?.media?.kind);
+  const mediaRes = await fetch(`http://127.0.0.1:8737/api/chat/media/${up.message.media.id}?token=${dev.token}`);
+  console.log("chat media fetch:", mediaRes.status, "body:", await mediaRes.text());
+  const msgs = await fetch(`http://127.0.0.1:8737/api/chat/messages?after=0`, {
+    headers: { "x-archive-token": dev.token }
+  }).then((r) => r.json());
+  console.log("chat log length:", msgs.messages.length);
+
+  // ---- camera net
+  const frame = await fetch(`http://127.0.0.1:8737/api/cam/frame`, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream", "x-archive-token": dev.token },
+    body: Buffer.from([0xff, 0xd8, 0xff, 0xdb, 1, 2, 3])
+  }).then((r) => r.json());
+  console.log("cam frame accepted:", frame.ok === true);
+  const camList = await fetch(`http://127.0.0.1:8737/api/cam/list`, {
+    headers: { "x-archive-token": hostToken }
+  }).then((r) => r.json());
+  console.log("cam feeds:", camList.feeds.length, "name:", camList.feeds[0]?.name);
+  const frameGet = await fetch(`http://127.0.0.1:8737/api/cam/frame?feed=${deviceId}`, {
+    headers: { "x-archive-token": hostToken }
+  });
+  console.log("cam frame get:", frameGet.status, frameGet.headers.get("content-type"));
+  const reqCamAsDevice = await fetch(`http://127.0.0.1:8737/api/cam/request`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-archive-token": dev.token },
+    body: JSON.stringify({ deviceId })
+  });
+  console.log("cam request as device blocked:", reqCamAsDevice.status === 403);
+  const reqCam = await fetch(`http://127.0.0.1:8737/api/cam/request`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-archive-token": hostToken },
+    body: JSON.stringify({ deviceId })
+  }).then((r) => r.json());
+  const listAsDevice = await fetch(`http://127.0.0.1:8737/api/cam/list`, {
+    headers: { "x-archive-token": dev.token }
+  }).then((r) => r.json());
+  console.log("cam request visible to device:", reqCam.ok === true && listAsDevice.requested === true);
+  await fetch(`http://127.0.0.1:8737/api/cam/stop`, {
+    method: "POST",
+    headers: { "x-archive-token": dev.token }
+  });
+
   srv.revoke(deviceId);
   const revoked = await fetch("http://127.0.0.1:8737/api/files?path=", {
     headers: { "x-archive-token": dev.token }
