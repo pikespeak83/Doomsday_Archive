@@ -37,15 +37,30 @@ export default function ChatNetApp({ base, token, selfId, onOpenMedia, notify })
       } else if (body.latest) {
         latestRef.current = body.latest;
       }
+      // resync removals (deletes / host purge) on the periodic full fetch
+      if (initial) setMessages(body.messages || []);
     } catch (err) {
       setError("RELAY UNREACHABLE");
+    }
+  }
+
+  async function refetchAll() {
+    try {
+      const res = await fetch(`${base}/api/chat/messages?after=0`, { headers: headers() });
+      if (!res.ok) return;
+      const body = await res.json();
+      latestRef.current = body.latest || 0;
+      setMessages(body.messages || []);
+    } catch {
+      // relay unreachable; the regular poll will surface it
     }
   }
 
   useEffect(() => {
     void poll(true);
     const t = setInterval(() => void poll(), 2500);
-    return () => clearInterval(t);
+    const full = setInterval(() => void refetchAll(), 12000);
+    return () => { clearInterval(t); clearInterval(full); };
   }, [base, token]);
 
   useEffect(() => {
@@ -102,6 +117,33 @@ export default function ChatNetApp({ base, token, selfId, onOpenMedia, notify })
     return `${base}/api/chat/media/${media.id}?token=${encodeURIComponent(token)}`;
   }
 
+  async function deleteMessage(m) {
+    playSound("toggle", 0.35);
+    try {
+      const res = await fetch(`${base}/api/chat/delete`, {
+        method: "POST",
+        headers: headers({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ seq: m.seq })
+      });
+      if (!res.ok) throw new Error();
+      setMessages((prev) => prev.filter((x) => x.seq !== m.seq));
+    } catch {
+      notify?.("DELETE FAILED", true);
+    }
+  }
+
+  async function clearAll() {
+    playSound("error", 0.4);
+    try {
+      const res = await fetch(`${base}/api/chat/clear`, { method: "POST", headers: headers() });
+      if (!res.ok) throw new Error();
+      setMessages([]);
+      notify?.("CHAT LOG PURGED");
+    } catch {
+      notify?.("PURGE FAILED", true);
+    }
+  }
+
   function openMedia(media) {
     if (!onOpenMedia) return;
     const kind = media.kind === "file" ? "binary" : media.kind;
@@ -133,6 +175,9 @@ export default function ChatNetApp({ base, token, selfId, onOpenMedia, notify })
               </span>
               {" :: "}
               {new Date(m.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              {(m.from.id === selfId || selfId === "host") && (
+                <button className="chatnet-del" title="Delete message" onClick={() => deleteMessage(m)}>[x]</button>
+              )}
             </div>
             {m.text && <div className="chatnet-body">{m.text}</div>}
             {m.media && (
@@ -169,6 +214,9 @@ export default function ChatNetApp({ base, token, selfId, onOpenMedia, notify })
         />
         <button className="btn small ghost" title="Attach file" onClick={() => fileRef.current?.click()}>+FILE</button>
         <button className="btn small" onClick={send} disabled={sending}>SEND</button>
+        {selfId === "host" && (
+          <button className="btn small danger" title="Purge the whole log for everyone" onClick={clearAll}>CLEAR ALL</button>
+        )}
       </div>
       <p className="dim" style={{ fontSize: 11, marginTop: 6 }}>
         Drop a file anywhere in this window to transmit it. Media plays inline on every node.

@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld("fieldApi", {
   getConfig: () => ipcRenderer.invoke("config:get"),
   saveConfig: (partial) => ipcRenderer.invoke("config:save", partial),
   getSysInfo: () => ipcRenderer.invoke("sys:info"),
+  checkForUpdates: () => ipcRenderer.invoke("update:check"),
 
   discover: () => ipcRenderer.invoke("field:discover"),
   download: (url) => ipcRenderer.invoke("field:download", url),

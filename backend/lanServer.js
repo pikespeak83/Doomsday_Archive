@@ -16,12 +16,13 @@ const { verifyPassword } = require("./passwordStore");
  *  - the host approves or denies it inside the desktop app
  *  - approved devices receive a bearer token, persisted in config
  */
-function createLanServer({ getConfig, saveDevices, onEvent, chatMediaDir = path.join(os.tmpdir(), "doomsday-archive-chat") }) {
+function createLanServer({ getConfig, saveDevices, onEvent, chatMediaDir = path.join(os.tmpdir(), "doomsday-archive-chat"), packDir = null }) {
   let server = null;
   let currentPort = null;
 
   /** Active live feed: { path, name, kind, startedAt } or null. */
   let broadcast = null;
+  let alertLevel = "none";
 
   /** The host app itself authenticates with this rotating loopback token. */
   const hostToken = crypto.randomUUID();
@@ -230,15 +231,45 @@ function createLanServer({ getConfig, saveDevices, onEvent, chatMediaDir = path.
     });
 
     app.get("/api/broadcast/state", (_req, res) => {
-      if (!broadcast) return res.json({ active: false, serverNow: Date.now() });
+      const alert = alertLevel;
+      if (!broadcast) return res.json({ active: false, serverNow: Date.now(), alert });
       res.json({
         active: true,
         path: broadcast.path,
         name: broadcast.name,
         kind: broadcast.kind,
         startedAt: broadcast.startedAt,
-        serverNow: Date.now()
+        serverNow: Date.now(),
+        alert
       });
+    });
+
+    // ---------------------------------------------- broadcast pack (retro TV)
+
+    app.use("/api/pack", requireToken);
+
+    app.get("/api/pack/manifest", (_req, res) => {
+      try {
+        const file = packDir && path.join(packDir, "manifest.json");
+        if (!file || !fs.existsSync(file)) return res.json({ installed: false });
+        const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+        res.json({ installed: true, ...manifest });
+      } catch {
+        res.json({ installed: false });
+      }
+    });
+
+    app.get("/api/pack/file", (req, res) => {
+      try {
+        const rel = String(req.query.rel || "").replace(/\\/g, "/");
+        if (!packDir || !rel || rel.includes("..")) return res.status(400).json({ error: "bad path" });
+        const abs = path.join(packDir, rel);
+        if (!abs.startsWith(path.resolve(packDir))) return res.status(400).json({ error: "bad path" });
+        if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) return res.status(404).json({ error: "gone" });
+        res.sendFile(abs);
+      } catch (err) {
+        res.status(400).json({ error: String(err.message || err) });
+      }
     });
 
     // ---------------------------------------------- chat (text + media)
@@ -254,6 +285,24 @@ function createLanServer({ getConfig, saveDevices, onEvent, chatMediaDir = path.
       if (!text) return res.status(400).json({ error: "empty message" });
       const message = pushChat(req.archiveDevice, text, null);
       res.json({ ok: true, message });
+    });
+
+    app.post("/api/chat/clear", (req, res) => {
+      if (!req.archiveDevice.host) return res.status(403).json({ error: "host only" });
+      chatMessages.length = 0;
+      emit("chat-cleared", {});
+      res.json({ ok: true });
+    });
+
+    app.post("/api/chat/delete", (req, res) => {
+      const seq = Number(req.body?.seq || 0);
+      const idx = chatMessages.findIndex((m) => m.seq === seq);
+      if (idx === -1) return res.status(404).json({ error: "gone" });
+      const mine = chatMessages[idx].from?.id === req.archiveDevice.id;
+      if (!mine && !req.archiveDevice.host) return res.status(403).json({ error: "not yours" });
+      chatMessages.splice(idx, 1);
+      emit("chat-deleted", { seq });
+      res.json({ ok: true });
     });
 
     app.post("/api/chat/upload", express.raw({ type: () => true, limit: "25mb" }), (req, res) => {
@@ -435,6 +484,15 @@ function createLanServer({ getConfig, saveDevices, onEvent, chatMediaDir = path.
     emit("broadcast", { active: Boolean(next), name: next?.name || null });
   }
 
+  function setAlert(level) {
+    alertLevel = level === "red" ? "red" : "none";
+    emit("alert", { level: alertLevel });
+  }
+
+  function getAlert() {
+    return alertLevel;
+  }
+
   function getBroadcast() {
     return broadcast;
   }
@@ -452,13 +510,14 @@ function createLanServer({ getConfig, saveDevices, onEvent, chatMediaDir = path.
       sourceStats: sourceStats(cfg.archiveSources),
       allowDownloads: cfg.allowDownloads !== false,
       cams: [...camFeeds.values()].map(({ frame, ...meta }) => meta),
+      alert: alertLevel,
       broadcast: broadcast
         ? { active: true, name: broadcast.name, path: broadcast.path, kind: broadcast.kind, startedAt: broadcast.startedAt }
         : { active: false }
     };
   }
 
-  return { start, stop, approve, deny, revoke, getState, interfaces, setBroadcast, getBroadcast };
+  return { start, stop, approve, deny, revoke, getState, interfaces, setBroadcast, getBroadcast, setAlert, getAlert };
 }
 
 module.exports = { createLanServer };

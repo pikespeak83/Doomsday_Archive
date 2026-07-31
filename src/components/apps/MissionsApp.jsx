@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { playSound } from "../../lib/sounds.js";
+import TextPrompt from "../TextPrompt.jsx";
 
 const STATUS_TABS = [
   ["active", "ACTIVE"],
@@ -13,6 +14,7 @@ export default function MissionsApp({ notify }) {
   const [tab, setTab] = useState("active");
   const [selectedId, setSelectedId] = useState(null);
   const [objDraft, setObjDraft] = useState("");
+  const [naming, setNaming] = useState(false);
 
   useEffect(() => {
     window.archiveApi.getData("missions").then(setData);
@@ -33,10 +35,7 @@ export default function MissionsApp({ notify }) {
     await save(records.map((m) => (m.id === id ? { ...m, ...partial, updatedAt: Date.now() } : m)));
   }
 
-  async function newMission() {
-    playSound("confirm", 0.5);
-    const codename = window.prompt("Mission codename:", "OPERATION ");
-    if (!codename?.trim()) return;
+  async function newMission(codename) {
     const rec = {
       id: `m${Date.now()}`,
       codename: codename.trim().toUpperCase(),
@@ -50,6 +49,7 @@ export default function MissionsApp({ notify }) {
     };
     await save([rec, ...records]);
     setSelectedId(rec.id);
+    notify?.(`MISSION FILE OPENED: ${rec.codename}`);
   }
 
   async function destroy(rec) {
@@ -68,8 +68,17 @@ export default function MissionsApp({ notify }) {
             {label} ({records.filter((m) => (m.status || "active") === value).length})
           </button>
         ))}
-        <button className="btn small" style={{ marginLeft: "auto" }} onClick={newMission}>NEW MISSION</button>
+        <button className="btn small" style={{ marginLeft: "auto" }} onClick={() => { playSound("confirm", 0.5); setNaming(true); }}>NEW MISSION</button>
       </div>
+
+      {naming && (
+        <TextPrompt
+          title="MISSION CODENAME"
+          initial="OPERATION "
+          onSubmit={(value) => void newMission(value)}
+          onClose={() => setNaming(false)}
+        />
+      )}
 
       {!selected && (
         <table className="data-table">

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { playSound } from "../../lib/sounds.js";
+import TextPrompt from "../TextPrompt.jsx";
 
 const CATEGORIES = [
   ["biological", "BIOLOGICAL"],
@@ -16,6 +17,7 @@ export default function ResearchApp({ notify, onOpenMedia }) {
   const [data, setData] = useState(null);
   const [cat, setCat] = useState("biological");
   const [selectedId, setSelectedId] = useState(null);
+  const [naming, setNaming] = useState(false);
 
   useEffect(() => {
     window.archiveApi.getData("research").then(setData);
@@ -36,10 +38,7 @@ export default function ResearchApp({ notify, onOpenMedia }) {
     await save(records.map((r) => (r.id === id ? { ...r, ...partial, updatedAt: Date.now() } : r)));
   }
 
-  async function newEntry() {
-    const title = window.prompt("Entry title:");
-    if (!title?.trim()) return;
-    playSound("confirm", 0.5);
+  async function newEntry(title) {
     const rec = {
       id: `r${Date.now()}`,
       category: cat,
@@ -51,6 +50,7 @@ export default function ResearchApp({ notify, onOpenMedia }) {
     };
     await save([rec, ...records]);
     setSelectedId(rec.id);
+    notify?.(`RESEARCH ENTRY OPENED: ${rec.title}`);
   }
 
   async function openAttachment(att) {
@@ -80,8 +80,16 @@ export default function ResearchApp({ notify, onOpenMedia }) {
             {label} ({records.filter((r) => r.category === value).length})
           </button>
         ))}
-        <button className="btn small" style={{ marginTop: 10, width: "100%" }} onClick={newEntry}>NEW ENTRY</button>
+        <button className="btn small" style={{ marginTop: 10, width: "100%" }} onClick={() => { playSound("confirm", 0.5); setNaming(true); }}>NEW ENTRY</button>
       </div>
+
+      {naming && (
+        <TextPrompt
+          title="RESEARCH ENTRY TITLE"
+          onSubmit={(value) => void newEntry(value)}
+          onClose={() => setNaming(false)}
+        />
+      )}
 
       <div className="research-main">
         {!selected && (

@@ -38,6 +38,17 @@ export default function RemoteArchiveApp({ connection, config, onAuthLost, onOpe
   return (
     <div>
       <div style={{ marginBottom: 10 }}>
+        <button
+          className="btn small ghost"
+          style={{ marginRight: 10 }}
+          disabled={!listing.path}
+          onClick={() => {
+            playSound("click", 0.35);
+            void load(crumbs.slice(0, -1).join("/"));
+          }}
+        >
+          {"<"} BACK
+        </button>
         <a
           href="#"
           className="bright"

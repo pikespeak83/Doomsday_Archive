@@ -4,7 +4,7 @@ import { playSound } from "../../lib/sounds.js";
 /** Small local console: status, devices, uplink info, and flavor. */
 export default function TerminalApp({ lanState, sysInfo, config }) {
   const [lines, setLines] = useState([
-    "CERBERUS ARCHIVE SHELL v1.2",
+    "CERBERUS ARCHIVE SHELL v1.3",
     'Type "help" for available commands.',
     ""
   ]);

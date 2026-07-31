@@ -23,9 +23,11 @@ import SecurityApp from "./components/apps/SecurityApp.jsx";
 import SatelliteApp from "./components/apps/SatelliteApp.jsx";
 import AssistantApp from "./components/apps/AssistantApp.jsx";
 import CalculatorApp from "./components/apps/CalculatorApp.jsx";
-import SnakeApp from "./components/apps/SnakeApp.jsx";
+import GamesApp from "./components/apps/GamesApp.jsx";
+import TvApp from "./components/apps/TvApp.jsx";
 import ChatNetApp from "./components/apps/ChatNetApp.jsx";
 import CameraNetApp from "./components/apps/CameraNetApp.jsx";
+import TextPrompt from "./components/TextPrompt.jsx";
 import FaultyTerminal from "./reactbits/FaultyTerminal.jsx";
 import LetterGlitch from "./reactbits/LetterGlitch.jsx";
 import LineSidebar from "./reactbits/LineSidebar.jsx";
@@ -38,6 +40,7 @@ const APPS = [
   { id: "comms", label: "Comms", width: 700 },
   { id: "chat", label: "Chat", width: 660 },
   { id: "cameras", label: "Cameras", width: 840 },
+  { id: "tv", label: "Broadcast", width: 800 },
   { id: "personnel", label: "Personnel", width: 760 },
   { id: "missions", label: "Missions", width: 760 },
   { id: "research", label: "Research", width: 780 },
@@ -49,7 +52,7 @@ const APPS = [
   { id: "devices", label: "Devices", width: 560 },
   { id: "terminal", label: "Terminal", width: 640 },
   { id: "calc", label: "Calculator", width: 340 },
-  { id: "snake", label: "Serpent", width: 500 },
+  { id: "games", label: "Ghost Games", width: 580 },
   { id: "help", label: "Help", width: 580 },
   { id: "settings", label: "Settings", width: 620 }
 ];
@@ -80,8 +83,11 @@ export default function App() {
   const [shuttingDown, setShuttingDown] = useState(false);
   const [deskMenu, setDeskMenu] = useState(null); // { x, y }
   const [iconMenu, setIconMenu] = useState(null); // { x, y, appId }
+  const [iconRename, setIconRename] = useState(null); // { appId, current }
   const windowsRef = useRef(windows);
   windowsRef.current = windows;
+  const configRef = useRef(config);
+  configRef.current = config;
 
   useEffect(() => {
     (async () => {
@@ -124,15 +130,32 @@ export default function App() {
         pushToast(event.active ? `LIVE FEED STARTED: ${event.name}` : "LIVE FEED ENDED");
       } else if (event.type === "chat") {
         if (event.message?.from?.id !== "host") {
-          playSound("notify", 0.3);
+          if (configRef.current?.chimeEnabled !== false) playSound("notify", 0.45);
           pushToast(`CHAT :: ${event.message?.from?.name}: ${String(event.message?.text || event.message?.media?.name || "").slice(0, 60)}`);
         }
       } else if (event.type === "cam") {
         if (event.device?.id !== "host") {
+          if (configRef.current?.chimeEnabled !== false) playSound("notify", 0.4);
           pushToast(event.active ? `CAMERA ONLINE :: ${event.device?.name}` : `CAMERA OFFLINE :: ${event.device?.name}`);
         }
       } else if (event.type === "cam-declined") {
         pushToast(`CAMERA REQUEST DECLINED :: ${event.device?.name}`, true);
+      } else if (event.type === "alert") {
+        if (event.level === "red") {
+          playSound("klaxon", 0.6);
+          pushToast("RED ALERT :: ALL STATIONS", true);
+        } else {
+          pushToast("ALERT CONDITION CLEARED");
+        }
+      } else if (event.type === "chat-cleared") {
+        pushToast("CHAT LOG PURGED BY HOST");
+      } else if (event.type === "pack-downloading") {
+        pushToast("RETRIEVING BROADCAST ARCHIVE FROM THE GRID...");
+      } else if (event.type === "pack-ready") {
+        playSound("confirm", 0.5);
+        pushToast("BROADCAST ARCHIVE INSTALLED :: SIGNAL UP");
+      } else if (event.type === "pack-failed") {
+        pushToast(`BROADCAST RETRIEVAL FAILED: ${String(event.error || "").toUpperCase()}`, true);
       }
     });
     return () => {
@@ -244,10 +267,13 @@ export default function App() {
   const fx = THEME_FX[theme] || THEME_FX.green;
   const scanlines = config.scanlinesEnabled !== false;
   const reduceMotion = config.reduceMotion === true;
-  const shellClass = `os-root ${scanlines ? "crt" : ""} ${reduceMotion ? "reduce-motion" : ""}`;
+  // roadmap: no CRT effect over playing video
+  const videoOpen = windows.some((w) => !w.minimized && (w.appId === "tv" || w.appId === "livefeed" || (w.type === "media" && w.media?.kind === "video")));
+  const shellClass = `os-root ${scanlines && !videoOpen ? "crt" : ""} ${reduceMotion ? "reduce-motion" : ""}`;
   const themeClass = theme === "green" ? "" : `theme-${theme}`;
   const bundledBackdrop = BUNDLED_BACKDROPS[backdrop];
   const iconPositions = config.iconPositions || {};
+  const deskFolders = config.deskFolders || [];
 
   async function moveIcon(appId, pos, deskHeight) {
     const others = Object.entries(config.iconPositions || {})
@@ -263,8 +289,11 @@ export default function App() {
   async function renameIcon(appId) {
     const meta = APPS.find((a) => a.id === appId);
     const current = (config.iconNames || {})[appId] || meta?.label || "";
-    const name = window.prompt("Icon name:", current);
-    if (name === null) return;
+    setIconRename({ appId, current });
+  }
+
+  async function commitIconName(appId, name) {
+    const meta = APPS.find((a) => a.id === appId);
     const clean = name.trim().slice(0, 24);
     const iconNames = { ...(config.iconNames || {}) };
     if (!clean || clean === meta?.label) delete iconNames[appId];
@@ -305,10 +334,39 @@ export default function App() {
     if (res?.ok === false) {
       playSound("error", 0.5);
       pushToast(`CREATE FAILED: ${res.error || "unknown"}`);
+      return;
+    }
+    playSound("select", 0.4);
+    if (type === "dir") {
+      // desktop folders live on the desktop and in the sidebar, not lost in the drive root
+      const folder = { id: `df${Date.now()}`, name, rel: `${src.id}/${name}` };
+      setConfig(await window.archiveApi.saveConfig({ deskFolders: [...deskFolders, folder] }));
+      pushToast(`FOLDER ON DESKTOP: ${name}`);
     } else {
-      playSound("select", 0.4);
       pushToast(`CREATED ${name} IN ${(src.label || "SOURCE").toUpperCase()} :: SEE ARCHIVE`);
     }
+  }
+
+  function openFolder(folder) {
+    playSound("click", 0.4);
+    setWindows((prev) => {
+      const existing = prev.find((w) => w.type === "folder" && w.folder?.id === folder.id);
+      if (existing) return prev.map((w) => (w.key === existing.key ? { ...w, minimized: false } : w));
+      return [...prev, {
+        key: `folder-${++windowKey}`,
+        type: "folder",
+        folder,
+        title: `VAULT // ${folder.name.toUpperCase().slice(0, 30)}`,
+        width: 680,
+        minimized: false
+      }];
+    });
+  }
+
+  async function removeDeskFolder(folderId) {
+    setConfig(await window.archiveApi.saveConfig({
+      deskFolders: deskFolders.filter((f) => f.id !== folderId)
+    }));
   }
 
   function onDesktopContext(e) {
@@ -381,12 +439,22 @@ export default function App() {
 
         <LineSidebar
           title="DCI"
-          items={APPS.map((app) => ({
-            id: app.id,
-            label: app.label,
-            active: windows.some((w) => w.appId === app.id && !w.minimized)
-          }))}
-          onSelect={openApp}
+          items={[
+            ...APPS.map((app) => ({
+              id: app.id,
+              label: app.label,
+              active: windows.some((w) => w.appId === app.id && !w.minimized)
+            })),
+            ...deskFolders.map((f) => ({ id: `folder:${f.id}`, label: f.name, folder: true }))
+          ]}
+          onSelect={(id) => {
+            if (id.startsWith("folder:")) {
+              const folder = deskFolders.find((f) => `folder:${f.id}` === id);
+              if (folder) openFolder(folder);
+            } else {
+              openApp(id);
+            }
+          }}
         />
 
         <div className="icon-column">
@@ -400,6 +468,16 @@ export default function App() {
               onMenu={(at) => setIconMenu({ ...at, appId: app.id })}
             />
           ))}
+          {deskFolders.filter((f) => !iconPositions[`folder:${f.id}`]).map((f) => (
+            <DeskIcon
+              key={f.id}
+              label={f.name}
+              pos={null}
+              onOpen={() => openFolder(f)}
+              onMove={(pos, deskH) => moveIcon(`folder:${f.id}`, pos, deskH)}
+              onMenu={(at) => setIconMenu({ ...at, folderId: f.id })}
+            />
+          ))}
         </div>
         {APPS.filter((app) => iconPositions[app.id]).map((app) => (
           <DeskIcon
@@ -409,6 +487,16 @@ export default function App() {
             onOpen={() => openApp(app.id)}
             onMove={(pos, deskH) => moveIcon(app.id, pos, deskH)}
             onMenu={(at) => setIconMenu({ ...at, appId: app.id })}
+          />
+        ))}
+        {deskFolders.filter((f) => iconPositions[`folder:${f.id}`]).map((f) => (
+          <DeskIcon
+            key={f.id}
+            label={f.name}
+            pos={iconPositions[`folder:${f.id}`]}
+            onOpen={() => openFolder(f)}
+            onMove={(pos, deskH) => moveIcon(`folder:${f.id}`, pos, deskH)}
+            onMenu={(at) => setIconMenu({ ...at, folderId: f.id })}
           />
         ))}
 
@@ -425,6 +513,16 @@ export default function App() {
               onClose={() => closeWindow(win.key)}
             >
               {win.type === "media" && <MediaViewer media={win.media} />}
+              {win.type === "folder" && (
+                <ArchiveApp
+                  sources={sources}
+                  initialPath={win.folder.rel}
+                  onOpenSettings={() => openApp("settings")}
+                  onOpenMedia={openMedia}
+                  onBroadcast={broadcast}
+                  notify={pushToast}
+                />
+              )}
               {win.appId === "archive" && (
                 <ArchiveApp
                   sources={sources}
@@ -445,7 +543,19 @@ export default function App() {
               {win.appId === "satellite" && <SatelliteApp lanState={lanState} notify={pushToast} />}
               {win.appId === "oracle" && <AssistantApp lanState={lanState} sysInfo={sysInfo} />}
               {win.appId === "calc" && <CalculatorApp />}
-              {win.appId === "snake" && <SnakeApp />}
+              {win.appId === "games" && <GamesApp />}
+              {win.appId === "tv" && (
+                lanState?.running && lanState?.hostToken ? (
+                  <TvApp
+                    base={`http://127.0.0.1:${lanState.port || 8737}`}
+                    token={lanState.hostToken}
+                    isHost
+                    notify={pushToast}
+                  />
+                ) : (
+                  <p className="warn">THE UPLINK IS OFFLINE. START IT IN SETTINGS &gt; NETWORK.</p>
+                )
+              )}
               {win.appId === "chat" && (
                 lanState?.running && lanState?.hostToken ? (
                   <ChatNetApp
@@ -509,12 +619,26 @@ export default function App() {
           <ContextMenu
             x={iconMenu.x}
             y={iconMenu.y}
-            items={[
+            items={iconMenu.folderId ? [
+              { label: "OPEN", onClick: () => { const f = deskFolders.find((x) => x.id === iconMenu.folderId); if (f) openFolder(f); } },
+              { label: "RESET POSITION", onClick: () => resetIconPos(`folder:${iconMenu.folderId}`) },
+              { divider: true },
+              { label: "REMOVE FROM DESKTOP", danger: true, onClick: () => removeDeskFolder(iconMenu.folderId) }
+            ] : [
               { label: "OPEN", onClick: () => openApp(iconMenu.appId) },
               { label: "RENAME", onClick: () => renameIcon(iconMenu.appId) },
               { label: "RESET POSITION", onClick: () => resetIconPos(iconMenu.appId) }
             ]}
             onClose={() => setIconMenu(null)}
+          />
+        )}
+        {iconRename && (
+          <TextPrompt
+            title="ICON NAME"
+            initial={iconRename.current}
+            maxLength={24}
+            onSubmit={(value) => void commitIconName(iconRename.appId, value)}
+            onClose={() => setIconRename(null)}
           />
         )}
       </div>
@@ -526,6 +650,7 @@ export default function App() {
           </div>
         ))}
       </div>
+      {lanState?.alert === "red" && <div className="red-alert-veil" />}
     </div>
     {shuttingDown && <div className="crt-off-line" />}
     </>

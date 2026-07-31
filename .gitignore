@@ -15,3 +15,5 @@ dev_log.txt
 dist_log.txt
 dist_client_log.txt
 data-*.json
+pack_log.txt
+Temp/

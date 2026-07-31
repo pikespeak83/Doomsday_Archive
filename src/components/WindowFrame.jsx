@@ -50,7 +50,10 @@ export default function WindowFrame({ title, onClose, onMinimize, minimized, ini
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       >
-        <span>{title}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+          <img className="window-logo" src="assets/brand/cerberus.jpg" alt="" draggable={false} />
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+        </span>
         <span style={{ display: "flex", gap: 5 }}>
           {onMinimize && (
             <button

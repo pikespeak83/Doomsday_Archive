@@ -20,14 +20,16 @@ import TaskBar from "../components/TaskBar.jsx";
 import ChatNetApp from "../components/apps/ChatNetApp.jsx";
 import CameraNetApp from "../components/apps/CameraNetApp.jsx";
 import CalculatorApp from "../components/apps/CalculatorApp.jsx";
-import SnakeApp from "../components/apps/SnakeApp.jsx";
+import GamesApp from "../components/apps/GamesApp.jsx";
+import TvApp from "../components/apps/TvApp.jsx";
+import TextPrompt from "../components/TextPrompt.jsx";
 import { THEME_FX, BUNDLED_BACKDROPS, THEME_CHOICES } from "../lib/themes.js";
 import { snapToGrid } from "../lib/deskGrid.js";
 import { playSound, setSoundsEnabled } from "../lib/sounds.js";
 import { baseUrl, listFiles, requestAccess, accessState, hostInfo, broadcastState, downloadUrl } from "./api.js";
 
 const FIELD_BOOT_LINES = [
-  "CERBERUS FIELD TERMINAL v1.2.0 :: SECURE KERNEL LOADED",
+  "CERBERUS FIELD TERMINAL v1.3.0 :: SECURE KERNEL LOADED",
   "CHECKING LOCAL HARDWARE ........ OK",
   "UPLINK RECEIVER ................ READY",
   "EXTERNAL NETWORKS .............. SEVERED",
@@ -38,9 +40,10 @@ const APPS = [
   { id: "archive", label: "Archive", width: 640 },
   { id: "chat", label: "Chat", width: 660 },
   { id: "cameras", label: "Cameras", width: 800 },
+  { id: "tv", label: "Broadcast", width: 800 },
   { id: "uplink", label: "Uplink", width: 540 },
   { id: "calc", label: "Calculator", width: 340 },
-  { id: "snake", label: "Serpent", width: 500 },
+  { id: "games", label: "Ghost Games", width: 580 },
   { id: "help", label: "Help", width: 560 },
   { id: "settings", label: "Settings", width: 520 }
 ];
@@ -68,6 +71,8 @@ export default function FieldApp() {
   const [shuttingDown, setShuttingDown] = useState(false);
   const [deskMenu, setDeskMenu] = useState(null); // { x, y }
   const [iconMenu, setIconMenu] = useState(null); // { x, y, appId }
+  const [iconRename, setIconRename] = useState(null); // { appId, current }
+  const [redAlert, setRedAlert] = useState(false);
   const pollRef = useRef(null);
   const feedPollRef = useRef(null);
   const feedKeyRef = useRef(null);
@@ -120,11 +125,22 @@ export default function FieldApp() {
     const base = baseUrl(connection.address, connection.port);
     let lastActivePath = null;
     let camPrompted = false;
+    let alertOn = false;
     const poll = async () => {
       try {
         const res = await broadcastState(base, config.token);
         if (!res.ok) return;
         const state = res.json;
+        if (state.alert === "red" && !alertOn) {
+          alertOn = true;
+          setRedAlert(true);
+          playSound("klaxon", 0.6);
+          pushToast("RED ALERT DECLARED BY HOST NODE", true);
+        } else if (state.alert !== "red" && alertOn) {
+          alertOn = false;
+          setRedAlert(false);
+          pushToast("ALERT CONDITION CLEARED");
+        }
         if (state.active && state.path !== lastActivePath) {
           lastActivePath = state.path;
           const clockOffset = state.serverNow - Date.now();
@@ -392,8 +408,11 @@ export default function FieldApp() {
   async function renameIcon(appId) {
     const meta = APPS.find((a) => a.id === appId);
     const current = (config.iconNames || {})[appId] || meta?.label || "";
-    const name = window.prompt("Icon name:", current);
-    if (name === null) return;
+    setIconRename({ appId, current });
+  }
+
+  async function commitIconName(appId, name) {
+    const meta = APPS.find((a) => a.id === appId);
     const clean = name.trim().slice(0, 24);
     const iconNames = { ...(config.iconNames || {}) };
     if (!clean || clean === meta?.label) delete iconNames[appId];
@@ -432,9 +451,12 @@ export default function FieldApp() {
     }))
   ];
 
+  // roadmap: no CRT effect over playing video
+  const videoOpen = windows.some((w) => !w.minimized && (w.appId === "tv" || w.type === "feed" || (w.type === "media" && w.media?.kind === "video")));
+
   return (
     <>
-    <div className={`os-root crt ${themeClass} ${shuttingDown ? "powering-off" : ""}`}>
+    <div className={`os-root ${videoOpen ? "" : "crt"} ${themeClass} ${shuttingDown ? "powering-off" : ""}`}>
       {phase === "boot" && (
         <BootScreen
           hostname={sysInfo.hostname}
@@ -688,7 +710,15 @@ export default function FieldApp() {
                   />
                 )}
                 {win.appId === "calc" && <CalculatorApp />}
-                {win.appId === "snake" && <SnakeApp />}
+                {win.appId === "games" && <GamesApp />}
+                {win.appId === "tv" && (
+                  <TvApp
+                    base={baseUrl(connection.address, connection.port)}
+                    token={config.token}
+                    isHost={false}
+                    notify={pushToast}
+                  />
+                )}
                 {win.appId === "settings" && (
                   <FieldSettingsApp config={config} onConfigChange={setConfig} />
                 )}
@@ -724,6 +754,15 @@ export default function FieldApp() {
               onClose={() => setIconMenu(null)}
             />
           )}
+          {iconRename && (
+            <TextPrompt
+              title="ICON NAME"
+              initial={iconRename.current}
+              maxLength={24}
+              onSubmit={(value) => void commitIconName(iconRename.appId, value)}
+              onClose={() => setIconRename(null)}
+            />
+          )}
         </div>
       )}
 
@@ -734,6 +773,7 @@ export default function FieldApp() {
           </div>
         ))}
       </div>
+      {redAlert && <div className="red-alert-veil" />}
     </div>
     {shuttingDown && <div className="crt-off-line" />}
     </>

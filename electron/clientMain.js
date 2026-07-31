@@ -46,6 +46,7 @@ if (!currentConfig.deviceId) {
 }
 
 let mainWindow = null;
+let updater = null;
 const pkg = require("../package.json");
 const appVersion = String(pkg?.version || "0.0.0").trim() || "0.0.0";
 
@@ -72,16 +73,23 @@ function createMainWindow() {
   if (!app.isPackaged) {
     // dev aid: report whether the UI actually rendered (visible in the dev terminal)
     mainWindow.webContents.on("did-finish-load", () => {
-      setTimeout(async () => {
+      let tries = 0;
+      const probeOnce = async () => {
+        tries += 1;
         try {
           const probe = await mainWindow.webContents.executeJavaScript(
             "(() => ({ topbar: !!document.querySelector('.topbar'), boot: !!document.querySelector('.boot'), connect: !!document.querySelector('.connect-wrap'), err: window.__lastError || null }))()"
           );
-          console.log("[ui-probe field]", JSON.stringify(probe));
+          if ((probe.topbar || probe.err) || tries >= 12) {
+            console.log("[ui-probe field]", JSON.stringify(probe));
+            return;
+          }
+          setTimeout(probeOnce, 2500);
         } catch (err) {
           console.log("[ui-probe field] failed:", String(err.message || err));
         }
-      }, 2500);
+      };
+      setTimeout(probeOnce, 2500);
     });
   }
 
@@ -159,6 +167,8 @@ ipcMain.handle("sys:info", () => ({
   version: appVersion
 }));
 
+ipcMain.handle("update:check", () => (updater ? updater.checkNow(mainWindow) : { status: "busy" }));
+
 ipcMain.handle("field:discover", async () => discoverHosts(1800));
 
 ipcMain.handle("field:download", (_event, url) => {
@@ -186,7 +196,7 @@ ipcMain.handle("window:close", () => mainWindow?.close());
 
 app.whenReady().then(() => {
   createMainWindow();
-  const updater = createUpdater({
+  updater = createUpdater({
     assetPrefix: "Doomsday-Field-Terminal-Setup",
     currentVersion: appVersion,
     onEvent: (event) => sendToRenderer("field:update", event)

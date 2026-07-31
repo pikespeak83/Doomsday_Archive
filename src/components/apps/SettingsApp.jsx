@@ -172,6 +172,7 @@ export default function SettingsApp({ config, onConfigChange, notify }) {
               ["onyx", "ONYX MAP"],
               ["circuit", "BLUE CIRCUIT"],
               ["gold", "GOLD GRID"],
+              ["vaultec", "VAULT-TEC POSTER"],
               ["terminal", "FAULTY TERMINAL"],
               ["glitch", "LETTER GLITCH"],
               ["none", "PLAIN"]
@@ -252,6 +253,11 @@ export default function SettingsApp({ config, onConfigChange, notify }) {
               setSoundsEnabled(value);
               return save({ uiSoundsEnabled: value });
             }}
+          />
+          <Toggle
+            label="ALERT CHIME ON NOTIFICATIONS"
+            checked={config.chimeEnabled !== false}
+            onChange={(value) => save({ chimeEnabled: value })}
           />
           <div className="field-label">MASTER VOLUME :: {Math.round((config.soundVolume ?? 1) * 100)}%</div>
           <input
@@ -342,6 +348,8 @@ export default function SettingsApp({ config, onConfigChange, notify }) {
             checked={config.ambientEventsEnabled !== false}
             onChange={(value) => save({ ambientEventsEnabled: value })}
           />
+          <hr className="hr" />
+          <UpdateSection api={window.archiveApi} label="NODE SOFTWARE" />
         </>
       )}
 
@@ -356,7 +364,7 @@ export default function SettingsApp({ config, onConfigChange, notify }) {
 }
 
 /** Bundled backdrops force the matching style. */
-const BACKDROP_THEMES = { emerald: "green", ember: "amber", crimson: "crimson", onyx: "mono", circuit: "cobalt", gold: "gold" };
+const BACKDROP_THEMES = { emerald: "green", ember: "amber", crimson: "crimson", onyx: "mono", circuit: "cobalt", gold: "gold", vaultec: "vault" };
 
 function PasswordSection({ config, onConfigChange }) {
   const [current, setCurrent] = useState("");
@@ -436,6 +444,52 @@ function PasswordSection({ config, onConfigChange }) {
       {message && (
         <p className={message.warn ? "warn" : "bright"} style={{ fontSize: 12, marginTop: 8 }}>
           {message.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Version readout + manual grid update check; shared by host and field settings. */
+export function UpdateSection({ api, label }) {
+  const [version, setVersion] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState(null); // { text, warn }
+
+  useEffect(() => {
+    api.getSysInfo().then((info) => setVersion(info.version || ""));
+  }, []);
+
+  async function check() {
+    playSound("confirm", 0.5);
+    setChecking(true);
+    setResult(null);
+    try {
+      const res = await api.checkForUpdates();
+      if (res.status === "current") setResult({ text: `THIS NODE IS CURRENT (v${version})` });
+      else if (res.status === "offline") setResult({ text: "GRID UNREACHABLE :: RUNNING ARCHIVED SOFTWARE", warn: true });
+      else if (res.status === "dev") setResult({ text: "DEV NODE :: LIVE UPDATER OFFLINE", warn: true });
+      else if (res.status === "busy") setResult({ text: "UPDATER ALREADY WORKING", warn: true });
+      else if (res.status === "skipped") setResult({ text: `UPDATE ${res.remoteVersion} AVAILABLE ON THE GRID` });
+      // "installing" restarts the app; nothing to render
+    } catch {
+      setResult({ text: "UPDATE CHECK FAILED", warn: true });
+    }
+    setChecking(false);
+  }
+
+  return (
+    <div>
+      <div className="field-label">{label}</div>
+      <p className="dim" style={{ fontSize: 12, margin: "2px 0 8px" }}>
+        INSTALLED VERSION :: v{version || "?"} :: checks the GitHub grid when reachable
+      </p>
+      <button className="btn" onClick={check} disabled={checking}>
+        {checking ? "SCANNING THE GRID..." : "CHECK GRID FOR UPDATES"}
+      </button>
+      {result && (
+        <p className={result.warn ? "warn" : "bright"} style={{ fontSize: 12, marginTop: 8 }}>
+          {result.text}
         </p>
       )}
     </div>

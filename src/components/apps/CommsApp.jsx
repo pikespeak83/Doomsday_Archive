@@ -184,6 +184,19 @@ export default function CommsApp({ notify, onOpenApp }) {
               </div>
             </div>
           )}
+          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+            <button className="btn small ghost"
+              onClick={() => window.archiveApi.openExternal("https://radio.garden/")}>
+              OPEN EXTERNAL RADIO (GRID)
+            </button>
+            <button className="btn small ghost"
+              onClick={() => window.archiveApi.openExternal("https://www.broadcastify.com/listen/")}>
+              OPEN POLICE SCANNER (GRID)
+            </button>
+          </div>
+          <p className="dim" style={{ fontSize: 11, marginTop: 4 }}>
+            External receivers need the grid (internet). Vault program audio works offline.
+          </p>
         </>
       )}
 

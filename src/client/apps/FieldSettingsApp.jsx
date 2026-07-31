@@ -1,6 +1,6 @@
 import React from "react";
 import { setSoundsEnabled } from "../../lib/sounds.js";
-import { Toggle } from "../../components/apps/SettingsApp.jsx";
+import { Toggle, UpdateSection } from "../../components/apps/SettingsApp.jsx";
 import { THEME_CHOICES } from "../../lib/themes.js";
 
 export default function FieldSettingsApp({ config, onConfigChange }) {
@@ -55,6 +55,7 @@ export default function FieldSettingsApp({ config, onConfigChange }) {
           ["onyx", "ONYX MAP"],
           ["circuit", "BLUE CIRCUIT"],
           ["gold", "GOLD GRID"],
+          ["vaultec", "VAULT-TEC POSTER"],
           ["none", "PLAIN"]
         ].map(([value, label]) => (
           <button
@@ -86,9 +87,12 @@ export default function FieldSettingsApp({ config, onConfigChange }) {
           </button>
         ))}
       </div>
+
+      <hr className="hr" />
+      <UpdateSection api={window.fieldApi} label="TERMINAL SOFTWARE" />
     </div>
   );
 }
 
 /** Bundled backdrops force the matching style. */
-const BACKDROP_THEMES = { emerald: "green", ember: "amber", crimson: "crimson", onyx: "mono", circuit: "cobalt", gold: "gold" };
+const BACKDROP_THEMES = { emerald: "green", ember: "amber", crimson: "crimson", onyx: "mono", circuit: "cobalt", gold: "gold", vaultec: "vault" };

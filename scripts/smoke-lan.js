@@ -1,6 +1,18 @@
 // Temporary smoke test for the LAN server (run: node scripts/smoke-lan.js)
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const { createLanServer } = require("../backend/lanServer");
 const { hashPassword } = require("../backend/passwordStore");
+
+// throwaway pack dir with a manifest + one fake episode
+const packDir = path.join(os.tmpdir(), `da-pack-${Date.now()}`);
+fs.mkdirSync(path.join(packDir, "video"), { recursive: true });
+fs.writeFileSync(path.join(packDir, "manifest.json"), JSON.stringify({
+  version: 1,
+  channels: [{ id: "ch1", num: 1, name: "TEST", episodes: [{ id: "e1", title: "E1", file: "video/e1.mp4", duration: 10 }] }]
+}));
+fs.writeFileSync(path.join(packDir, "video", "e1.mp4"), Buffer.from("fake mp4 bytes"));
 
 const secret = hashPassword("test-pass-123");
 const config = {
@@ -15,7 +27,8 @@ const config = {
 const srv = createLanServer({
   getConfig: () => config,
   saveDevices: (devices) => { config.approvedDevices = devices; },
-  onEvent: (e) => console.log("EVT", e.type)
+  onEvent: (e) => console.log("EVT", e.type),
+  packDir
 });
 
 srv.start(8737).then(async (state) => {
@@ -104,6 +117,47 @@ srv.start(8737).then(async (state) => {
   }).then((r) => r.json());
   console.log("chat log length:", msgs.messages.length);
 
+  // delete own message, host clears the rest
+  const delOther = await fetch(`http://127.0.0.1:8737/api/chat/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-archive-token": dev.token },
+    body: JSON.stringify({ seq: hostSent.message.seq })
+  });
+  console.log("delete foreign message blocked:", delOther.status === 403);
+  const delMine = await fetch(`http://127.0.0.1:8737/api/chat/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-archive-token": dev.token },
+    body: JSON.stringify({ seq: sent.message.seq })
+  }).then((r) => r.json());
+  const clearAsDevice = await fetch(`http://127.0.0.1:8737/api/chat/clear`, {
+    method: "POST", headers: { "x-archive-token": dev.token }
+  });
+  const clearAsHost = await fetch(`http://127.0.0.1:8737/api/chat/clear`, {
+    method: "POST", headers: { "x-archive-token": hostToken }
+  }).then((r) => r.json());
+  const afterClear = await fetch(`http://127.0.0.1:8737/api/chat/messages?after=0`, {
+    headers: { "x-archive-token": dev.token }
+  }).then((r) => r.json());
+  console.log("chat delete own:", delMine.ok === true, "clear device blocked:", clearAsDevice.status === 403, "host clear:", clearAsHost.ok === true, "log now:", afterClear.messages.length);
+
+  // ---- broadcast pack
+  const packNoAuth = await fetch(`http://127.0.0.1:8737/api/pack/manifest`);
+  const packManifest = await fetch(`http://127.0.0.1:8737/api/pack/manifest`, {
+    headers: { "x-archive-token": dev.token }
+  }).then((r) => r.json());
+  console.log("pack noauth:", packNoAuth.status === 401, "manifest installed:", packManifest.installed, "channels:", packManifest.channels?.length);
+  const packFile = await fetch(`http://127.0.0.1:8737/api/pack/file?rel=video%2Fe1.mp4&token=${dev.token}`);
+  console.log("pack file:", packFile.status, "bytes:", (await packFile.arrayBuffer()).byteLength);
+  const packTrav = await fetch(`http://127.0.0.1:8737/api/pack/file?rel=..%2Fmanifest.json&token=${dev.token}`);
+  console.log("pack traversal blocked:", packTrav.status === 400);
+
+  // ---- red alert
+  srv.setAlert("red");
+  const alertState = await fetch(`http://127.0.0.1:8737/api/broadcast/state?token=${dev.token}`).then((r) => r.json());
+  srv.setAlert("none");
+  const alertOff = await fetch(`http://127.0.0.1:8737/api/broadcast/state?token=${dev.token}`).then((r) => r.json());
+  console.log("red alert visible:", alertState.alert === "red", "cleared:", alertOff.alert === "none");
+
   // ---- camera net
   const frame = await fetch(`http://127.0.0.1:8737/api/cam/frame`, {
     method: "POST",
@@ -146,6 +200,7 @@ srv.start(8737).then(async (state) => {
   console.log("after revoke status", revoked.status);
 
   await srv.stop();
+  fs.rmSync(packDir, { recursive: true, force: true });
   console.log("SMOKE OK");
   process.exit(0);
 }).catch((err) => {

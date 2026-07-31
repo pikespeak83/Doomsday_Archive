@@ -32,7 +32,7 @@ try {
 }
 
 # upload assets (replace if already present)
-$assets = @("Doomsday-Archive-Setup-$version.exe", "Doomsday-Field-Terminal-Setup-$version.exe")
+$assets = @("Doomsday-Archive-Setup-$version.exe", "Doomsday-Field-Terminal-Setup-$version.exe", "Broadcast-Pack.zip")
 foreach ($name in $assets) {
   $file = Join-Path "$root\release" $name
   if (-not (Test-Path $file)) { Write-Host "MISSING: $name"; continue }

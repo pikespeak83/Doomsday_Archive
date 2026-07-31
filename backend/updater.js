@@ -88,18 +88,27 @@ function createUpdater({ assetPrefix, currentVersion, onEvent }) {
     return false;
   }
 
-  async function checkOnLaunch(parentWindow) {
-    if (busy || !app.isPackaged) return;
+  async function runCheck(parentWindow, manual) {
+    if (busy) return { status: "busy" };
+    if (!app.isPackaged && !manual) return { status: "dev" };
     busy = true;
     try {
-      const release = await httpGetJson(RELEASES_URL);
+      let release;
+      try {
+        release = await httpGetJson(RELEASES_URL);
+      } catch {
+        return { status: "offline" };
+      }
       const remoteVersion = String(release.tag_name || release.name || "").trim();
-      if (!remoteVersion || !isNewer(remoteVersion, currentVersion)) return;
+      if (!remoteVersion || !isNewer(remoteVersion, currentVersion)) {
+        return { status: "current", remoteVersion: remoteVersion || null };
+      }
+      if (!app.isPackaged) return { status: "dev", remoteVersion };
 
       const asset = (release.assets || []).find(
         (a) => a.name?.startsWith(assetPrefix) && a.name.endsWith(".exe")
       );
-      if (!asset?.browser_download_url) return;
+      if (!asset?.browser_download_url) return { status: "current", remoteVersion };
 
       emit("update-found", { version: remoteVersion });
       const { response } = await dialog.showMessageBox(parentWindow, {
@@ -114,7 +123,7 @@ function createUpdater({ assetPrefix, currentVersion, onEvent }) {
       });
       if (response !== 0) {
         emit("update-skipped", { version: remoteVersion });
-        return;
+        return { status: "skipped", remoteVersion };
       }
 
       emit("update-downloading", { version: remoteVersion });
@@ -125,14 +134,24 @@ function createUpdater({ assetPrefix, currentVersion, onEvent }) {
       const child = spawn(destPath, [], { detached: true, stdio: "ignore" });
       child.unref();
       setTimeout(() => app.quit(), 400);
+      return { status: "installing", remoteVersion };
     } catch {
-      // offline, rate-limited, or no releases yet: stay silent, stay offline
+      return { status: "offline" };
     } finally {
       busy = false;
     }
   }
 
-  return { checkOnLaunch };
+  async function checkOnLaunch(parentWindow) {
+    // silent on every failure path: grid-down is the normal state
+    await runCheck(parentWindow, false);
+  }
+
+  function checkNow(parentWindow) {
+    return runCheck(parentWindow, true);
+  }
+
+  return { checkOnLaunch, checkNow };
 }
 
 module.exports = { createUpdater };

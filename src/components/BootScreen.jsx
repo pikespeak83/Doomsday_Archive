@@ -5,7 +5,7 @@ import DecryptedText from "../reactbits/DecryptedText.jsx";
 import { playSound } from "../lib/sounds.js";
 
 const DEFAULT_LINES = [
-  "CERBERUS ARCHIVE OS v1.2.0 :: SECURE KERNEL LOADED",
+  "CERBERUS ARCHIVE OS v1.3.0 :: SECURE KERNEL LOADED",
   "MOUNTING LOCAL NODE ............ OK",
   "SCANNING STORAGE BUS ........... OK",
   "UPLINK MODULE (LAN ONLY) ....... READY",

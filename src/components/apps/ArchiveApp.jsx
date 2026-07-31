@@ -16,14 +16,13 @@ const VIEWABLE = ["image", "video", "audio", "text"];
 
 /**
  * Host vault browser: full drives, Windows-style right-click menu,
- * cut/paste + drag moving, inline viewers, live feed broadcast.
+ * copy/paste + drag moving, inline viewers, live feed broadcast.
  */
-export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBroadcast, notify }) {
+export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBroadcast, notify, initialPath }) {
   const [listing, setListing] = useState({ path: "", entries: [] });
   const [error, setError] = useState("");
   const [menu, setMenu] = useState(null); // { x, y, entry|null }
   const [clipboard, setClipboard] = useState(null); // { rel, name }
-  const [renaming, setRenaming] = useState(null); // { rel, name, draft }
   const [creating, setCreating] = useState(null); // { type: "dir"|"file", draft }
   const [dragOver, setDragOver] = useState("");
 
@@ -37,7 +36,7 @@ export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBro
   }
 
   useEffect(() => {
-    if (sources?.length) void load(listing.path || "");
+    if (sources?.length) void load(listing.path || initialPath || "");
   }, [sources?.length]);
 
   const inFolder = Boolean(listing.path);
@@ -86,11 +85,19 @@ export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBro
 
   async function pasteInto(destRel) {
     if (!clipboard) return;
-    const moved = await doOp(window.archiveApi.vaultMove(clipboard.rel, destRel));
-    if (moved) {
-      notify?.(`MOVED: ${clipboard.name}`);
+    const copied = await doOp(window.archiveApi.vaultCopy(clipboard.rel, destRel));
+    if (copied) {
+      notify?.(`COPIED: ${clipboard.name}`);
       setClipboard(null);
     }
+  }
+
+  function copyPath(rel) {
+    const link = `/VAULT/${rel}`;
+    navigator.clipboard.writeText(link).then(
+      () => notify?.(`PATH COPIED: ${link}`),
+      () => notify?.("CLIPBOARD UNAVAILABLE", true)
+    );
   }
 
   function entryMenu(entry) {
@@ -106,26 +113,17 @@ export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBro
     if (entry.type !== "drive") {
       items.push({ divider: true });
       items.push({
-        label: "CUT (MOVE)",
+        label: "COPY",
         onClick: () => {
           setClipboard({ rel, name: entry.name });
-          notify?.(`CUT: ${entry.name} (paste in a folder)`);
+          notify?.(`COPIED: ${entry.name} (paste in a folder)`);
         }
       });
       if (clipboard && entry.type === "dir") {
         items.push({ label: `PASTE INTO ${entry.name}`, onClick: () => pasteInto(rel) });
       }
-      items.push({
-        label: "RENAME",
-        onClick: () => setRenaming({ rel, name: entry.name, draft: entry.name })
-      });
-      items.push({ divider: true });
-      items.push({
-        label: "DELETE (RECYCLE BIN)",
-        danger: true,
-        onClick: () => doOp(window.archiveApi.vaultDelete(rel)).then((ok) => ok && notify?.(`RECYCLED: ${entry.name}`))
-      });
     }
+    items.push({ label: "COPY PATH", onClick: () => copyPath(rel) });
     return items;
   }
 
@@ -174,6 +172,17 @@ export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBro
       }}
     >
       <div style={{ marginBottom: 10 }}>
+        <button
+          className="btn small ghost"
+          style={{ marginRight: 10 }}
+          disabled={!inFolder}
+          onClick={() => {
+            playSound("click", 0.35);
+            void load(crumbs.slice(0, -1).join("/"));
+          }}
+        >
+          {"<"} BACK
+        </button>
         <a
           href="#"
           className="bright"
@@ -201,7 +210,7 @@ export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBro
         ))}
         {clipboard && (
           <span className="dim" style={{ marginLeft: 10, fontSize: 12 }}>
-            [ CUT: {clipboard.name} ]
+            [ COPY: {clipboard.name} ]
           </span>
         )}
       </div>
@@ -240,13 +249,12 @@ export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBro
           )}
           {listing.entries.map((entry) => {
             const rel = relOf(entry);
-            const isRenaming = renaming?.rel === rel;
             const droppable = entry.type !== "file";
             return (
               <tr
                 key={entry.id || entry.name}
                 className={`click ${dragOver === rel ? "drop-target" : ""}`}
-                draggable={entry.type !== "drive" && !isRenaming}
+                draggable={entry.type !== "drive"}
                 onDragStart={(e) => {
                   e.dataTransfer.setData("text/da-rel", rel);
                   e.dataTransfer.setData("text/plain", entry.name);
@@ -268,7 +276,7 @@ export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBro
                 }}
                 onDoubleClick={() => openEntry(entry)}
                 onClick={() => {
-                  if (entry.type !== "file" && !isRenaming) {
+                  if (entry.type !== "file") {
                     playSound("click", 0.35);
                     void load(rel);
                   }
@@ -283,32 +291,9 @@ export default function ArchiveApp({ sources, onOpenSettings, onOpenMedia, onBro
                   {entry.type === "drive" ? "[DRV]" : entry.type === "dir" ? "[DIR]" : (entry.kind || "file").toUpperCase().slice(0, 3)}
                 </td>
                 <td>
-                  {isRenaming ? (
-                    <input
-                      className="text-input"
-                      autoFocus
-                      value={renaming.draft}
-                      onChange={(e) => setRenaming({ ...renaming, draft: e.target.value })}
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={async (e) => {
-                        if (e.key === "Escape") setRenaming(null);
-                        if (e.key === "Enter") {
-                          const ok = await doOp(window.archiveApi.vaultRename(rel, renaming.draft));
-                          if (ok) {
-                            playSound("confirm", 0.4);
-                            setRenaming(null);
-                          }
-                        }
-                      }}
-                      onBlur={() => setRenaming(null)}
-                    />
-                  ) : (
-                    <>
-                      {entry.name}
-                      {entry.type === "drive" && entry.online === false && (
-                        <span className="warn"> (OFFLINE)</span>
-                      )}
-                    </>
+                  {entry.name}
+                  {entry.type === "drive" && entry.online === false && (
+                    <span className="warn"> (OFFLINE)</span>
                   )}
                 </td>
                 <td className="dim">

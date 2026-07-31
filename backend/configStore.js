@@ -60,6 +60,10 @@ const hostDefaults = {
   reduceMotion: false,
   /** Occasional ambient flavor notifications. */
   ambientEventsEnabled: true,
+  /** Audible ding on chat / camera notifications. */
+  chimeEnabled: true,
+  /** Folders pinned to the desktop: { id, name, rel }. */
+  deskFolders: [],
   /** ORACLE AI provider: auto | ollama | openai | google | off. */
   aiProvider: "auto",
   openaiKey: "",

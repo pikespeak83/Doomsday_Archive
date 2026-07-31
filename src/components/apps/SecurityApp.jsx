@@ -66,30 +66,61 @@ export default function SecurityApp({ lanState, sysInfo, config, notify }) {
 
   async function setAlarm(level) {
     if (level === alarm) return;
-    playSound(level === "red" ? "alert" : "toggle", 0.6);
+    playSound(level === "red" ? "klaxon" : "toggle", 0.6);
     await save({ ...data, alarm: level });
     appendLog(`ALARM STATE :: ${level.toUpperCase()}`, level === "green" ? "info" : "warn");
     notify?.(`SECURITY CONDITION ${level.toUpperCase()}`, level === "red");
+    // red alert reaches every connected terminal; anything else stands down
+    void window.archiveApi.setAlert(level === "red" ? "red" : "none");
+  }
+
+  function runSimulation(kind) {
+    playSound("alert", 0.4);
+    const scripts = {
+      doors: [
+        "DOOR DIAGNOSTIC :: CYCLING SEAL ACTUATORS",
+        "HYDRAULIC PRESSURE NOMINAL ON ALL SEALS",
+        "DOOR DIAGNOSTIC COMPLETE :: 0 FAULTS"
+      ],
+      cams: [
+        "CAMERA SWEEP :: POLLING ALL FEEDS",
+        "CAM 03 RETURNED STATIC :: REALIGNING ANTENNA",
+        "CAMERA SWEEP COMPLETE :: 2 LIVE / 2 DARK"
+      ],
+      power: [
+        "POWER FLUX TEST :: LOAD SHIFTED TO AUX CELLS",
+        "VOLTAGE DIP 4% :: WITHIN TOLERANCE",
+        "POWER TEST COMPLETE :: CELLS AT 98%"
+      ],
+      network: [
+        "NETWORK PROBE :: PINGING ALL SHELTER NODES",
+        "PACKET LOSS 0.0% :: LATENCY 2MS",
+        "NETWORK PROBE COMPLETE :: LAN SECURE"
+      ]
+    };
+    (scripts[kind] || []).forEach((line, i) => {
+      setTimeout(() => appendLog(line, i === 1 ? "warn" : "info"), i * 1400);
+    });
   }
 
   return (
     <div className={`sec-root alarm-${alarm}`}>
       <div className="sec-grid">
-        <div className="sec-panel">
+        <div className="sec-panel" onClick={() => runSimulation("doors")} title="Run door diagnostic">
           <div className="field-label" style={{ marginTop: 0 }}>DOOR STATUS ({sealedCount}/{doors.length} SEALED)</div>
           {doors.map((door) => (
             <div key={door.id} className="obj-row">
               <span className={`status-led ${door.sealed ? "ok" : "bad"}`} />
               <span>{door.name}</span>
               <button className={`btn small ${door.sealed ? "ghost" : "danger"}`} style={{ marginLeft: "auto" }}
-                onClick={() => toggleDoor(door)}>
+                onClick={(e) => { e.stopPropagation(); toggleDoor(door); }}>
                 {door.sealed ? "SEALED" : "OPEN!"}
               </button>
             </div>
           ))}
         </div>
 
-        <div className="sec-panel">
+        <div className="sec-panel" onClick={() => runSimulation("cams")} title="Run camera sweep">
           <div className="field-label" style={{ marginTop: 0 }}>CAMERA GRID</div>
           <div className="cam-grid">
             {["CAM 01 :: BLAST DOOR", "CAM 02 :: PANTRY", "CAM 03 :: PERIMETER N", "CAM 04 :: PERIMETER S"].map((label, i) => (
@@ -116,10 +147,10 @@ export default function SecurityApp({ lanState, sysInfo, config, notify }) {
               </button>
             ))}
           </div>
-          <div className="field-label">POWER</div>
+          <div className="field-label" onClick={() => runSimulation("power")} style={{ cursor: "pointer" }}>POWER</div>
           <div className="obj-row"><span className="status-led bad" /><span>GRID FEED</span><span className="dim" style={{ marginLeft: "auto" }}>SEVERED</span></div>
           <div className="obj-row"><span className="status-led ok" /><span>AUX CELLS</span><span className="bright" style={{ marginLeft: "auto" }}>NOMINAL</span></div>
-          <div className="field-label">NETWORK</div>
+          <div className="field-label" onClick={() => runSimulation("network")} style={{ cursor: "pointer" }}>NETWORK</div>
           <div className="obj-row">
             <span className={`status-led ${lanState?.running ? "ok" : "bad"}`} />
             <span>SHELTER LAN</span>

@@ -8,6 +8,7 @@ const { readConfig, writeConfig } = require("../backend/configStore");
 const { createLanServer } = require("../backend/lanServer");
 const { createResponder } = require("../backend/discovery");
 const { createUpdater } = require("../backend/updater");
+const { createPackStore } = require("../backend/packStore");
 const { listVirtual, resolveVirtual, sourceStats, kindOf } = require("../backend/archiveStore");
 const vaultOps = require("../backend/vaultOps");
 const { hashPassword, verifyPassword } = require("../backend/passwordStore");
@@ -41,6 +42,7 @@ app.setPath("cache", cacheDir);
 app.commandLine.appendSwitch("disk-cache-dir", cacheDir);
 
 let mainWindow = null;
+let updater = null;
 let tray = null;
 let currentConfig = readConfig();
 let isQuitting = false;
@@ -67,6 +69,7 @@ function sendToRenderer(channel, payload) {
 const lan = createLanServer({
   getConfig: () => currentConfig,
   chatMediaDir: path.join(app.getPath("userData"), "chat-media"),
+  packDir: path.join(app.getPath("userData"), "broadcast-pack"),
   saveDevices: (devices) => {
     currentConfig = { ...currentConfig, approvedDevices: devices };
     writeConfig(currentConfig);
@@ -110,16 +113,23 @@ function createMainWindow() {
   if (!app.isPackaged) {
     // dev aid: report whether the UI actually rendered (visible in the dev terminal)
     mainWindow.webContents.on("did-finish-load", () => {
-      setTimeout(async () => {
+      let tries = 0;
+      const probeOnce = async () => {
+        tries += 1;
         try {
           const probe = await mainWindow.webContents.executeJavaScript(
             "(() => ({ topbar: !!document.querySelector('.topbar'), boot: !!document.querySelector('.boot'), icons: document.querySelectorAll('.desk-icon').length, err: window.__lastError || null }))()"
           );
-          console.log("[ui-probe host]", JSON.stringify(probe));
+          if ((probe.topbar || probe.err) || tries >= 12) {
+            console.log("[ui-probe host]", JSON.stringify(probe));
+            return;
+          }
+          setTimeout(probeOnce, 2500);
         } catch (err) {
           console.log("[ui-probe host] failed:", String(err.message || err));
         }
-      }, 2500);
+      };
+      setTimeout(probeOnce, 2500);
     });
   }
 
@@ -296,6 +306,27 @@ ipcMain.handle("sys:info", () => ({
   interfaces: lan.interfaces()
 }));
 
+ipcMain.handle("update:check", () => (updater ? updater.checkNow(mainWindow) : { status: "busy" }));
+
+const packStore = createPackStore({
+  packDir: path.join(app.getPath("userData"), "broadcast-pack"),
+  onEvent: (event) => sendToRenderer("lan:event", event)
+});
+ipcMain.handle("pack:state", () => packStore.getState());
+ipcMain.handle("pack:install", () => packStore.install());
+
+ipcMain.handle("alert:set", (_e, level) => {
+  lan.setAlert(level);
+  return lan.getAlert();
+});
+
+ipcMain.handle("shell:openExternal", (_e, url) => {
+  const target = String(url || "");
+  if (!/^https:\/\//i.test(target)) return false;
+  shell.openExternal(target);
+  return true;
+});
+
 ipcMain.handle("archive:pickFolder", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: "Link storage to the Doomsday Archive",
@@ -391,6 +422,8 @@ ipcMain.handle("vault:rename", (_e, relPath, newName) =>
   vaultOp(() => vaultOps.renameEntry(currentConfig.archiveSources, relPath, newName)));
 ipcMain.handle("vault:move", (_e, fromRel, toDirRel) =>
   vaultOp(() => vaultOps.moveEntry(currentConfig.archiveSources, fromRel, toDirRel)));
+ipcMain.handle("vault:copy", (_e, fromRel, toDirRel) =>
+  vaultOp(() => vaultOps.copyEntry(currentConfig.archiveSources, fromRel, toDirRel)));
 ipcMain.handle("vault:delete", async (_e, relPath) => {
   try {
     await vaultOps.deleteEntry(currentConfig.archiveSources, relPath);
@@ -781,7 +814,7 @@ app.whenReady().then(async () => {
   if (currentConfig.sharingEnabled) {
     await lan.start(currentConfig.port);
   }
-  const updater = createUpdater({
+  updater = createUpdater({
     assetPrefix: "Doomsday-Archive-Setup",
     currentVersion: appVersion,
     onEvent: (event) => sendToRenderer("lan:event", event)

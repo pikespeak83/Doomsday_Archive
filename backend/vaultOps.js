@@ -74,6 +74,24 @@ async function deleteEntry(sources, relPath) {
   return true;
 }
 
+/** Copy an entry into a destination folder, auto-suffixing on name clash. */
+function copyEntry(sources, fromRel, toDirRel) {
+  assertNotRoot(fromRel);
+  const { abs: fromAbs } = resolveVirtual(sources, fromRel);
+  const { abs: toDirAbs } = resolveVirtual(sources, toDirRel);
+  if (!fs.statSync(toDirAbs).isDirectory()) throw new Error("Destination is not a folder");
+  const parsed = path.parse(path.basename(fromAbs));
+  let target = path.join(toDirAbs, parsed.base);
+  let n = 2;
+  while (fs.existsSync(target)) target = path.join(toDirAbs, `${parsed.name} (copy ${n++})${parsed.ext}`);
+  const cmpFrom = fromAbs.toLowerCase() + path.sep;
+  if ((target.toLowerCase() + path.sep).startsWith(cmpFrom)) {
+    throw new Error("Cannot copy a folder into itself");
+  }
+  fs.cpSync(fromAbs, target, { recursive: true, errorOnExist: true, force: false });
+  return true;
+}
+
 function cleanName(name) {
   const clean = String(name || "").trim().replace(/[<>:"/\\|?*\x00-\x1f]/g, "");
   if (!clean || clean === "." || clean === "..") throw new Error("Invalid name");
@@ -86,4 +104,4 @@ function joinRel(parentRel, name) {
   return `${parent}/${name}`;
 }
 
-module.exports = { makeFolder, makeFile, renameEntry, moveEntry, deleteEntry };
+module.exports = { makeFolder, makeFile, renameEntry, moveEntry, deleteEntry, copyEntry };

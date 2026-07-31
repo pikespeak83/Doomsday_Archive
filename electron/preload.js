@@ -4,6 +4,12 @@ contextBridge.exposeInMainWorld("archiveApi", {
   getConfig: () => ipcRenderer.invoke("config:get"),
   saveConfig: (partial) => ipcRenderer.invoke("config:save", partial),
   getSysInfo: () => ipcRenderer.invoke("sys:info"),
+  checkForUpdates: () => ipcRenderer.invoke("update:check"),
+  getPackState: () => ipcRenderer.invoke("pack:state"),
+  installPack: () => ipcRenderer.invoke("pack:install"),
+  setAlert: (level) => ipcRenderer.invoke("alert:set", level),
+  openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
+  vaultCopy: (fromRel, toDirRel) => ipcRenderer.invoke("vault:copy", fromRel, toDirRel),
 
   pickFolder: () => ipcRenderer.invoke("archive:pickFolder"),
   listDrives: () => ipcRenderer.invoke("archive:listDrives"),

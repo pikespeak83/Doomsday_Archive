@@ -30,12 +30,12 @@ export default function LineSidebar({ items = [], onSelect, title = "" }) {
         {items.map((item) => (
           <button
             key={item.id}
-            className={`line-sidebar-item ${item.active ? "active" : ""}`}
+            className={`line-sidebar-item ${item.active ? "active" : ""} ${item.folder ? "folder" : ""}`}
             onClick={() => onSelect?.(item.id)}
             title={item.label}
           >
             <span className="line-sidebar-node" />
-            <span className="line-sidebar-label">{item.label}</span>
+            <span className="line-sidebar-label">{item.folder ? `[${item.label}]` : item.label}</span>
           </button>
         ))}
       </div>
