@@ -20,7 +20,7 @@ try {
     tag_name = $tag
     target_commitish = "main"
     name = "Doomsday Archive $tag"
-    body = "Offline household archive. Two installers: **Doomsday-Archive-Setup** (host node) and **Doomsday-Field-Terminal-Setup** (field devices). Installed apps auto-check this page on launch when the grid is up."
+    body = "Offline household archive. Two installers: **Doomsday-Archive-Setup** (host node) and **Doomsday-Field-Terminal-Setup** (field devices). **Broadcast-Pack.zip** is the retro TV channel archive: the host retrieves it once from inside the app (BROADCAST > RETRIEVE) and then serves it to every field terminal over the LAN. Installed apps auto-check this page on launch when the grid is up."
   } | ConvertTo-Json)
   Write-Host "RELEASE CREATED: $($release.html_url)"
 } catch {
