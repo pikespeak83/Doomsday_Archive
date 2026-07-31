@@ -45,10 +45,22 @@ foreach ($name in $assets) {
     Invoke-RestMethod -Method Delete -Uri "https://api.github.com/repos/$repo/releases/assets/$($existing.id)" -Headers $headers | Out-Null
     Write-Host "REPLACING: $name"
   }
-  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-  [Net.ServicePointManager]::Expect100Continue = $false
+  # curl.exe streams large files reliably where Invoke-RestMethod drops the
+  # connection; the token rides in a temp config file, never on the command line
   $uploadUri = "https://uploads.github.com/repos/$repo/releases/$($release.id)/assets?name=$name"
-  $up = Invoke-RestMethod -Method Post -Uri $uploadUri -Headers ($headers + @{ "Content-Type" = "application/octet-stream" }) -InFile $file -TimeoutSec 600
-  Write-Host ("UPLOADED: {0} ({1:N1} MB) state={2}" -f $up.name, ($up.size / 1MB), $up.state)
+  $cfgFile = Join-Path $env:TEMP ("gh-upload-" + [guid]::NewGuid().ToString("n") + ".cfg")
+  @(
+    "header = ""Authorization: Bearer $token"""
+    "header = ""Content-Type: application/octet-stream"""
+    "header = ""Accept: application/vnd.github+json"""
+  ) | Set-Content -Path $cfgFile -Encoding ASCII
+  try {
+    $raw = & curl.exe -sS --fail-with-body --retry 3 --retry-delay 5 --retry-all-errors -K $cfgFile -X POST --data-binary "@$file" $uploadUri
+    if ($LASTEXITCODE -ne 0) { throw "curl exit $LASTEXITCODE :: $raw" }
+    $up = $raw | ConvertFrom-Json
+    Write-Host ("UPLOADED: {0} ({1:N1} MB) state={2}" -f $up.name, ($up.size / 1MB), $up.state)
+  } finally {
+    Remove-Item $cfgFile -Force -ErrorAction SilentlyContinue
+  }
 }
 Write-Host "DONE"
