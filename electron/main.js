@@ -15,6 +15,7 @@ const { hashPassword, verifyPassword } = require("../backend/passwordStore");
 const { getData, saveData } = require("../backend/dataStore");
 const { searchArchive } = require("../backend/archiveSearch");
 const { provisionStandardFolders } = require("../backend/provision");
+const { seedRecords } = require("../backend/seedArchive");
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -32,6 +33,10 @@ app.setName(APP_DISPLAY_NAME);
 if (process.platform === "win32") {
   app.setAppUserModelId("com.pikespeak83.doomsdayarchive");
 }
+
+// Capture the real userData root FIRST: setPath("cache") below re-derives
+// userData under the temp profile, which would drag every data dir with it.
+const userDataDir = app.getPath("userData");
 
 // Temp-based profile dir avoids cache write issues on some Windows setups.
 const profileDir = path.join(app.getPath("temp"), "doomsday-archive-profile");
@@ -68,8 +73,8 @@ function sendToRenderer(channel, payload) {
 
 const lan = createLanServer({
   getConfig: () => currentConfig,
-  chatMediaDir: path.join(app.getPath("userData"), "chat-media"),
-  packDir: path.join(app.getPath("userData"), "broadcast-pack"),
+  chatMediaDir: path.join(userDataDir, "chat-media"),
+  packDir: path.join(userDataDir, "broadcast-pack"),
   saveDevices: (devices) => {
     currentConfig = { ...currentConfig, approvedDevices: devices };
     writeConfig(currentConfig);
@@ -89,6 +94,44 @@ const discovery = createResponder(() => ({
   running: lan.getState().running,
   version: appVersion
 }));
+
+/** Phase 20: keep a seeded CERBERUS RECORDS source so the world has content. */
+const recordsBaseDir = path.join(userDataDir, "records");
+function ensureRecordsSource() {
+  try {
+    const recordsDir = recordsBaseDir;
+    const audioDir = app.isPackaged
+      ? path.join(app.getAppPath(), "dist", "assets", "seed", "audio")
+      : path.join(__dirname, "..", "public", "assets", "seed", "audio");
+    seedRecords(recordsDir, audioDir);
+    const sources = currentConfig.archiveSources || [];
+    // Self-heal: earlier builds registered this source under a temp profile path.
+    const stale = sources.find(
+      (s) => s.label === "CERBERUS RECORDS" && path.resolve(s.path).toLowerCase() !== recordsDir.toLowerCase()
+    );
+    if (stale) {
+      currentConfig = {
+        ...currentConfig,
+        archiveSources: sources.map((s) => (s.id === stale.id ? { ...s, path: recordsDir } : s))
+      };
+      writeConfig(currentConfig);
+      return;
+    }
+    const present = sources.some((s) => path.resolve(s.path).toLowerCase() === recordsDir.toLowerCase());
+    if (!present) {
+      const used = new Set(sources.map((s) => s.id));
+      let i = 0;
+      while (used.has(`src${i}`)) i += 1;
+      currentConfig = {
+        ...currentConfig,
+        archiveSources: [...sources, { id: `src${i}`, path: recordsDir, label: "CERBERUS RECORDS" }]
+      };
+      writeConfig(currentConfig);
+    }
+  } catch (err) {
+    console.error("records seed failed:", err);
+  }
+}
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -781,6 +824,7 @@ ipcMain.handle("window:close", () => {
 // ------------------------------------------------------------------ lifecycle
 
 app.whenReady().then(async () => {
+  ensureRecordsSource();
   protocol.handle("vault", (request) => {
     try {
       const url = new URL(request.url);

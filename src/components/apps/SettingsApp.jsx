@@ -15,11 +15,18 @@ export default function SettingsApp({ config, onConfigChange, notify }) {
   const [tab, setTab] = useState("STORAGE");
   const [drives, setDrives] = useState([]);
   const [portDraft, setPortDraft] = useState(String(config.port || 8737));
+  const [core, setCore] = useState(null); // local LLM core status
   const sources = config.archiveSources || [];
 
   useEffect(() => {
     window.archiveApi.listDrives().then(setDrives);
   }, []);
+
+  useEffect(() => {
+    if (tab !== "AI") return;
+    setCore(null);
+    window.archiveApi.oracleStatus().then(setCore).catch(() => setCore({ provider: "none" }));
+  }, [tab]);
 
   async function save(partial) {
     const next = await window.archiveApi.saveConfig(partial);
@@ -295,6 +302,31 @@ export default function SettingsApp({ config, onConfigChange, notify }) {
             AUTO prefers a local Ollama model (fully offline), then falls back to whichever
             cloud key is set. Cloud providers only work while the grid is up.
           </p>
+
+          <div className="field-label">LOCAL CORE (OLLAMA)</div>
+          <p className="dim" style={{ fontSize: 12, margin: "2px 0 6px" }}>
+            {core === null
+              ? "PROBING LOCAL CORE..."
+              : core.provider === "ollama"
+                ? `LOCAL CORE ONLINE :: MODELS: ${(core.models || []).join(", ").toUpperCase() || "NONE PULLED"}`
+                : "LOCAL CORE OFFLINE :: THE ORACLE RUNS FULLY OFFLINE ONCE OLLAMA IS INSTALLED"}
+          </p>
+          {core !== null && core.provider !== "ollama" && (
+            <>
+              <button
+                className="btn small"
+                onClick={() => {
+                  playSound("confirm", 0.5);
+                  void window.archiveApi.openExternal("https://ollama.com/download");
+                }}>
+                GET OLLAMA (EXTERNAL GRID LINK)
+              </button>
+              <p className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+                Install it, then run: ollama pull llama3.2 :: the ORACLE detects the local
+                core automatically, no key or grid link needed after that.
+              </p>
+            </>
+          )}
 
           <div className="field-label">OPENAI API KEY</div>
           <div style={{ display: "flex", gap: 6 }}>

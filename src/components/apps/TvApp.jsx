@@ -14,10 +14,12 @@ export default function TvApp({ base, token, isHost, notify }) {
   const [osd, setOsd] = useState(null);
   const [retrieving, setRetrieving] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [card, setCard] = useState(null); // interstitial test card gif
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const osdTimer = useRef(null);
   const staticTimer = useRef(null);
+  const cardTimer = useRef(null);
   const playingRef = useRef(null); // episode id currently loaded
 
   const q = `token=${encodeURIComponent(token || "")}`;
@@ -76,12 +78,15 @@ export default function TvApp({ base, token, isHost, notify }) {
     return () => clearInterval(iv);
   }, [channel, power, syncToLive]);
 
-  // static burst covers every tune
+  // static burst covers every tune, followed by a station test card
   function burst() {
     playSound("glitch", 0.4);
     setStatik(true);
     clearTimeout(staticTimer.current);
     staticTimer.current = setTimeout(() => setStatik(false), 520);
+    setCard(fileUrl(`test-card-${1 + Math.floor(Math.random() * 3)}.gif`));
+    clearTimeout(cardTimer.current);
+    cardTimer.current = setTimeout(() => setCard(null), 1900);
   }
 
   function tune(nextIdx) {
@@ -183,6 +188,15 @@ export default function TvApp({ base, token, isHost, notify }) {
           height={120}
           style={{ opacity: statik || !power ? (power ? 0.9 : 0.35) : 0 }}
         />
+        {card && power && (
+          <img
+            className="tv-card"
+            src={card}
+            alt=""
+            style={{ opacity: statik ? 0 : 1 }}
+            onError={() => setCard(null)}
+          />
+        )}
         {!power && <div className="tv-off-dot" />}
         <div className="tv-scanlines" />
         {osd && power && (

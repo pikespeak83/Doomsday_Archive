@@ -3,17 +3,60 @@ import { playSound } from "../../lib/sounds.js";
 
 const TABS = ["EMAIL", "RADIO", "INTERCEPTS", "SATELLITE"];
 
+/** Coded-traffic heuristic for the intercept watch: callsigns, number
+ * groups, bracket groups, or hot procedure words. */
+function looksCoded(text) {
+  const t = String(text || "");
+  return /\b[A-Z]{3,}-\d{1,4}\b/.test(t)
+    || /\b\d{5,}\b/.test(t)
+    || /\[[^\]]{3,}\]/.test(t)
+    || /\b(CODE|CIPHER|PROTOCOL|OMEGA|SIGMA|AUTHENTICATE|EXECUTE|FALLBACK|RENDEZVOUS)\b/i.test(t);
+}
+
 /** Communications hub: vault mail, radio stations, intercept log. */
-export default function CommsApp({ notify, onOpenApp }) {
+export default function CommsApp({ notify, onOpenApp, lanState }) {
   const [tab, setTab] = useState("EMAIL");
   const [data, setData] = useState(null);
   const [reading, setReading] = useState(null);
   const [compose, setCompose] = useState(null); // { to, subject, body }
   const [tuned, setTuned] = useState(null);
+  const [logging, setLogging] = useState(null); // { source, heard }
+  const [sigint, setSigint] = useState([]); // coded traffic lifted from shelter chat
 
   useEffect(() => {
     window.archiveApi.getData("comms").then(setData);
   }, []);
+
+  // Intercept watch: sweep the shelter chat for coded traffic while the tab is open.
+  useEffect(() => {
+    if (tab !== "INTERCEPTS" || !lanState?.running || !lanState?.hostToken) return undefined;
+    let stopped = false;
+    async function sweep() {
+      try {
+        const res = await fetch(`http://127.0.0.1:${lanState.port || 8737}/api/chat/messages?after=0`, {
+          headers: { "x-archive-token": lanState.hostToken }
+        });
+        if (!res.ok || stopped) return;
+        const body = await res.json();
+        const coded = (body.messages || [])
+          .filter((m) => m.text && looksCoded(m.text))
+          .slice(-25)
+          .map((m) => ({
+            id: `sig-${m.seq ?? m.id}`,
+            source: `SHELTER NET :: ${m.from?.name || "UNKNOWN STATION"}`,
+            heard: m.text,
+            time: m.time,
+            sigint: true
+          }));
+        if (!stopped) setSigint(coded);
+      } catch {
+        // relay unreachable; manual log still works
+      }
+    }
+    void sweep();
+    const timer = setInterval(sweep, 15000);
+    return () => { stopped = true; clearInterval(timer); };
+  }, [tab, lanState?.running, lanState?.hostToken, lanState?.port]);
 
   async function save(next) {
     setData(next);
@@ -50,16 +93,19 @@ export default function CommsApp({ notify, onOpenApp }) {
     }
   }
 
-  async function logIntercept() {
-    const source = window.prompt("Source (frequency / channel):", "SHORTWAVE");
-    if (source === null) return;
-    const heard = window.prompt("What was heard:");
-    if (!heard) return;
+  async function saveIntercept() {
+    if (!logging?.heard?.trim()) return setLogging(null);
     playSound("select", 0.4);
     await save({
       ...data,
-      intercepts: [{ id: `i${Date.now()}`, source: source || "UNKNOWN", heard, time: Date.now() }, ...intercepts]
+      intercepts: [{
+        id: `i${Date.now()}`,
+        source: logging.source?.trim() || "UNKNOWN",
+        heard: logging.heard.trim(),
+        time: Date.now()
+      }, ...intercepts]
     });
+    setLogging(null);
   }
 
   return (
@@ -204,8 +250,33 @@ export default function CommsApp({ notify, onOpenApp }) {
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div className="field-label" style={{ marginTop: 0 }}>SIGNAL INTERCEPT LOG</div>
-            <button className="btn small" onClick={logIntercept}>LOG INTERCEPT</button>
+            <button className="btn small" onClick={() => { playSound("click", 0.3); setLogging({ source: "SHORTWAVE", heard: "" }); }}>LOG INTERCEPT</button>
           </div>
+          {logging && (
+            <div style={{ border: "1px solid var(--green-dim)", padding: 8, margin: "8px 0" }}>
+              <input className="text-input" style={{ width: "100%", marginBottom: 6 }} placeholder="SOURCE (FREQUENCY / CHANNEL)"
+                value={logging.source} onChange={(e) => setLogging({ ...logging, source: e.target.value })} />
+              <textarea className="text-input" style={{ width: "100%", height: 70, resize: "vertical" }} placeholder="WHAT WAS HEARD"
+                value={logging.heard} onChange={(e) => setLogging({ ...logging, heard: e.target.value })} />
+              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                <button className="btn small" onClick={saveIntercept}>FILE INTERCEPT</button>
+                <button className="btn small ghost" onClick={() => setLogging(null)}>DISCARD</button>
+              </div>
+            </div>
+          )}
+          {sigint.length > 0 && (
+            <p className="dim" style={{ fontSize: 11, margin: "6px 0" }}>
+              INTERCEPT WATCH: {sigint.length} CODED TRANSMISSION{sigint.length === 1 ? "" : "S"} LIFTED FROM SHELTER NET TRAFFIC
+            </p>
+          )}
+          {[...sigint].reverse().map((it) => (
+            <div key={it.id} className="intercept sigint">
+              <div className="dim" style={{ fontSize: 11 }}>
+                <span className="sigint-tag">[SIGINT]</span> {it.source}{it.time ? ` :: ${new Date(it.time).toLocaleString()}` : ""}
+              </div>
+              <div style={{ marginTop: 3 }}>{it.heard}</div>
+            </div>
+          ))}
           {intercepts.map((it) => (
             <div key={it.id} className="intercept">
               <div className="dim" style={{ fontSize: 11 }}>
@@ -214,7 +285,12 @@ export default function CommsApp({ notify, onOpenApp }) {
               <div style={{ marginTop: 3 }}>{it.heard}</div>
             </div>
           ))}
-          {!intercepts.length && <p className="dim">airwaves quiet. for now.</p>}
+          {!intercepts.length && !sigint.length && <p className="dim">airwaves quiet. for now.</p>}
+          {(!lanState?.running || !lanState?.hostToken) && (
+            <p className="dim" style={{ fontSize: 11 }}>
+              INTERCEPT WATCH OFFLINE: start the uplink to sweep shelter chat for coded traffic.
+            </p>
+          )}
         </>
       )}
 

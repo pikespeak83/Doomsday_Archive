@@ -120,6 +120,63 @@
     margin: 0;
   }
   .hidden { display: none; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .tab {
+    margin-top: 0;
+    padding: 8px 14px;
+    font-size: 13px;
+    background: transparent;
+    border-color: var(--g-dim);
+    color: var(--g-dim);
+  }
+  .tab.on { background: var(--g-dark); border-color: var(--g); color: var(--g); }
+  /* broadcast */
+  .tv-wrap { position: relative; background: #000; border: 1px solid var(--g-dim); }
+  .tv-wrap video { width: 100%; max-height: 56vh; display: block; background: #000; }
+  .tv-osd {
+    position: absolute; top: 10px; left: 12px; right: 12px;
+    display: flex; gap: 12px; font-size: 14px; letter-spacing: 2px;
+    color: var(--g); text-shadow: 0 0 8px rgba(125,255,63,0.8);
+    pointer-events: none;
+  }
+  .tv-nc { padding: 40px 10px; text-align: center; letter-spacing: 4px; font-size: 22px; color: var(--g-dim); }
+  .tv-chs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .tv-chs button { margin-top: 0; font-size: 12px; padding: 7px 10px; }
+  .tv-chs button.ghost { background: transparent; border-color: var(--g-dim); color: var(--g-dim); }
+  /* shelter net */
+  .chat-log { max-height: 48vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+  .msg { border-left: 2px solid var(--g-dim); padding: 2px 0 2px 10px; }
+  .msg .who { font-size: 12px; color: var(--g-dim); letter-spacing: 2px; }
+  .msg .who b { color: var(--g); font-weight: normal; }
+  .msg .txt { font-size: 15px; line-height: 1.5; word-break: break-word; white-space: pre-wrap; }
+  .msg img, .msg video { max-width: 100%; max-height: 240px; border: 1px solid var(--g-dim); display: block; margin-top: 6px; }
+  .msg audio { width: 100%; margin-top: 6px; }
+  .msg a { color: var(--g); }
+  .chat-send { display: flex; gap: 6px; margin-top: 12px; }
+  .chat-send input[type=text] { flex: 1; }
+  .chat-send button { margin-top: 0; }
+  /* watchtower */
+  .cam-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .cam-cell { border: 1px solid var(--g-dim); background: #000; }
+  .cam-cell img { width: 100%; display: block; min-height: 140px; object-fit: cover; }
+  .cam-cell .cap { font-size: 12px; letter-spacing: 2px; padding: 5px 8px; color: var(--g-dim); border-top: 1px solid var(--g-dim); }
+  /* red alert */
+  #red-veil {
+    position: fixed; inset: 0; z-index: 55; pointer-events: none;
+    background: rgba(255, 30, 10, 0.16);
+    box-shadow: 0 0 120px rgba(255, 40, 20, 0.65) inset;
+    animation: redthrob 0.9s ease-in-out infinite alternate;
+  }
+  @keyframes redthrob { from { opacity: 0.45; } to { opacity: 1; } }
+  /* live feed overlay: keep display in CSS so the hidden class wins */
+  #feed-overlay {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(1, 4, 2, 0.96);
+    display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  #feed-overlay:not(.hidden) { display: flex; }
   footer {
     text-align: center;
     color: var(--g-dim);
@@ -169,6 +226,13 @@
       <div id="feed-banner" class="panel hidden" style="border-color:var(--g); cursor:pointer">
         <div class="status-line blink">LIVE FEED ACTIVE :: <span id="feed-name"></span> :: CLICK TO WATCH</div>
       </div>
+      <nav class="tabs">
+        <button class="tab on" data-tab="tab-archive">ARCHIVE</button>
+        <button class="tab" data-tab="tab-tv">BROADCAST</button>
+        <button class="tab" data-tab="tab-chat">SHELTER NET</button>
+        <button class="tab" data-tab="tab-cams">WATCHTOWER</button>
+      </nav>
+      <div id="tab-archive">
       <div class="panel">
         <div class="status-line" style="margin-bottom:8px">CLEARANCE GRANTED. ARCHIVE MOUNTED READ-ONLY.</div>
         <div class="crumbs" id="crumbs"></div>
@@ -177,9 +241,37 @@
           <tbody id="list"></tbody>
         </table>
       </div>
+      </div>
+      <div id="tab-tv" class="hidden">
+        <div class="panel">
+          <div id="tv-body"><div class="tv-nc">TUNING<span class="blink">_</span></div></div>
+        </div>
+      </div>
+      <div id="tab-chat" class="hidden">
+        <div class="panel">
+          <div class="status-line" style="margin-bottom:10px">SHELTER NET :: ALL STATIONS CHANNEL</div>
+          <div class="chat-log" id="chat-log"></div>
+          <div class="chat-send">
+            <input id="chat-text" type="text" maxlength="4000" placeholder="transmit to all stations" autocomplete="off">
+            <button id="chat-attach-btn" title="attach photo or file">+</button>
+            <button id="chat-send-btn">SEND</button>
+          </div>
+          <input id="chat-file" type="file" class="hidden" accept="image/*,video/*,audio/*,.pdf,.txt,.zip">
+        </div>
+      </div>
+      <div id="tab-cams" class="hidden">
+        <div class="panel">
+          <div class="status-line" style="margin-bottom:10px">WATCHTOWER :: LIVE CAMERA NET</div>
+          <div class="cam-grid" id="cam-grid"></div>
+          <div id="cam-empty" class="status-line" style="color:var(--g-dim); font-size:13px">
+            NO ACTIVE FEEDS. Terminals running the field client can transmit their camera from WATCHTOWER.
+          </div>
+        </div>
+      </div>
     </section>
   </main>
-  <div id="feed-overlay" class="hidden" style="position:fixed;inset:0;z-index:60;background:rgba(1,4,2,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px">
+  <div id="red-veil" class="hidden"></div>
+  <div id="feed-overlay" class="hidden">
     <div style="width:min(900px,94vw)">
       <div class="status-line" style="margin-bottom:8px">LIVE FEED :: <span id="feed-title"></span></div>
       <video id="feed-video" controls style="width:100%;max-height:70vh;background:#000;border:1px solid var(--g-dim)"></video>
@@ -363,6 +455,7 @@
           var v = $("feed-video");
           if (v.src) { v.pause(); v.removeAttribute("src"); v.load(); }
         }
+        $("red-veil").classList.toggle("hidden", state.alert !== "red");
       })
       .catch(function () {});
   }
@@ -386,6 +479,228 @@
     $("feed-overlay").classList.add("hidden");
   };
   setInterval(pollFeed, 5000);
+
+  /* ---- tabs ---- */
+  var curTab = "tab-archive";
+  function setTab(id) {
+    curTab = id;
+    ["tab-archive", "tab-tv", "tab-chat", "tab-cams"].forEach(function (t) {
+      $(t).classList.toggle("hidden", t !== id);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (b) {
+      b.classList.toggle("on", b.getAttribute("data-tab") === id);
+    });
+    stopTv(); stopChat(); stopCams();
+    if (id === "tab-tv") startTv();
+    else if (id === "tab-chat") startChat();
+    else if (id === "tab-cams") startCams();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (b) {
+    b.onclick = function () { setTab(b.getAttribute("data-tab")); };
+  });
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  /* ---- broadcast (pseudo-live wall clock TV) ---- */
+  var tvPack = null;
+  var tvCh = 0;
+  var tvTimer = null;
+  var tvPlaying = null;
+
+  function tvFileUrl(rel) {
+    return "/api/pack/file?rel=" + encodeURIComponent(rel) + "&token=" + encodeURIComponent(token);
+  }
+
+  function tvLivePos(ch) {
+    var total = 0;
+    ch.episodes.forEach(function (e) { total += e.duration || 1; });
+    var t = Math.floor(Date.now() / 1000) % (total || 1);
+    for (var i = 0; i < ch.episodes.length; i++) {
+      var d = ch.episodes[i].duration || 1;
+      if (t < d) return { ep: ch.episodes[i], offset: t };
+      t -= d;
+    }
+    return { ep: ch.episodes[0], offset: 0 };
+  }
+
+  function tvRenderShell() {
+    var chs = tvPack.channels || [];
+    var html =
+      '<div class="tv-wrap">' +
+      '<video id="tv-video" playsinline controls></video>' +
+      '<div class="tv-osd"><span id="tv-osd-ch"></span><span id="tv-osd-title"></span></div>' +
+      "</div>" +
+      '<div class="tv-chs" id="tv-chs"></div>';
+    $("tv-body").innerHTML = html;
+    var bar = $("tv-chs");
+    chs.forEach(function (c, i) {
+      var b = document.createElement("button");
+      b.textContent = "CH-" + c.num + " :: " + c.name;
+      b.className = i === tvCh ? "" : "ghost";
+      b.onclick = function () { tvCh = i; tvPlaying = null; tvRenderShell(); tvSync(); };
+      bar.appendChild(b);
+    });
+  }
+
+  function tvSync() {
+    if (!tvPack || !tvPack.installed) return;
+    var ch = (tvPack.channels || [])[tvCh];
+    var v = $("tv-video");
+    if (!ch || !v) return;
+    var live = tvLivePos(ch);
+    if (tvPlaying !== live.ep.id) {
+      tvPlaying = live.ep.id;
+      v.src = tvFileUrl(live.ep.file);
+      v.currentTime = live.offset;
+      v.play().catch(function () {});
+      $("tv-osd-ch").textContent = "CH-" + ch.num + " :: " + ch.name;
+      $("tv-osd-title").textContent = live.ep.title || "";
+    } else if (Math.abs(v.currentTime - live.offset) > 8) {
+      v.currentTime = live.offset;
+    }
+  }
+
+  function startTv() {
+    api("/api/pack/manifest").then(function (res) {
+      tvPack = res.ok ? res.json : { installed: false };
+      if (!tvPack.installed) {
+        $("tv-body").innerHTML =
+          '<div class="tv-nc">NO CARRIER</div>' +
+          '<div class="status-line" style="color:var(--g-dim);font-size:13px;text-align:center">' +
+          "The host node has not retrieved the broadcast archive yet.</div>";
+        return;
+      }
+      tvPlaying = null;
+      tvRenderShell();
+      tvSync();
+      tvTimer = setInterval(tvSync, 2000);
+    });
+  }
+
+  function stopTv() {
+    clearInterval(tvTimer);
+    tvTimer = null;
+    var v = $("tv-video");
+    if (v) { v.pause(); v.removeAttribute("src"); v.load(); }
+    tvPlaying = null;
+  }
+
+  /* ---- shelter net chat ---- */
+  var chatTimer = null;
+  var chatLastSeq = 0;
+
+  function chatMediaHtml(m) {
+    var url = "/api/chat/media/" + encodeURIComponent(m.id) + "?token=" + encodeURIComponent(token);
+    if (m.kind === "image") return '<a href="' + url + '" target="_blank"><img src="' + url + '" alt=""></a>';
+    if (m.kind === "video") return '<video src="' + url + '" controls playsinline></video>';
+    if (m.kind === "audio") return '<audio src="' + url + '" controls></audio>';
+    return '<a href="' + url + '" download="' + esc(m.name) + '">RETRIEVE :: ' + esc(m.name) + "</a>";
+  }
+
+  function chatRender(messages, replace) {
+    var log = $("chat-log");
+    var stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+    if (replace) log.innerHTML = "";
+    messages.forEach(function (m) {
+      var d = new Date(m.time);
+      var el = document.createElement("div");
+      el.className = "msg";
+      el.innerHTML =
+        '<div class="who"><b>' + esc(m.from && m.from.name || "?") + "</b> :: " +
+        String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") + "</div>" +
+        (m.text ? '<div class="txt">' + esc(m.text) + "</div>" : "") +
+        (m.media ? chatMediaHtml(m.media) : "");
+      log.appendChild(el);
+      if (m.seq > chatLastSeq) chatLastSeq = m.seq;
+    });
+    if ((stick || replace) && (messages.length || replace)) log.scrollTop = log.scrollHeight;
+  }
+
+  function chatPoll(initial) {
+    var after = initial ? 0 : chatLastSeq;
+    api("/api/chat/messages?after=" + after).then(function (res) {
+      if (!res.ok) return;
+      var list = res.json.messages || [];
+      if (initial) { chatLastSeq = 0; chatRender(list.slice(-100), true); }
+      else if (list.length) chatRender(list, false);
+    });
+  }
+
+  function startChat() {
+    chatPoll(true);
+    chatTimer = setInterval(function () { chatPoll(false); }, 3000);
+  }
+  function stopChat() { clearInterval(chatTimer); chatTimer = null; }
+
+  function chatSend() {
+    var text = $("chat-text").value.trim();
+    if (!text) return;
+    $("chat-text").value = "";
+    fetch("/api/chat/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-archive-token": token },
+      body: JSON.stringify({ text: text })
+    }).then(function () { chatPoll(false); });
+  }
+
+  $("chat-send-btn").onclick = chatSend;
+  $("chat-text").addEventListener("keydown", function (e) { if (e.key === "Enter") chatSend(); });
+  $("chat-attach-btn").onclick = function () { $("chat-file").click(); };
+  $("chat-file").addEventListener("change", function () {
+    var f = $("chat-file").files[0];
+    if (!f) return;
+    if (f.size > 25 * 1024 * 1024) { alert("Too large: uplink caps attachments at 25 MB."); return; }
+    var text = $("chat-text").value.trim();
+    $("chat-text").value = "";
+    f.arrayBuffer().then(function (buf) {
+      return fetch("/api/chat/upload?name=" + encodeURIComponent(f.name) + "&text=" + encodeURIComponent(text), {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream", "x-archive-token": token },
+        body: buf
+      });
+    }).then(function () {
+      $("chat-file").value = "";
+      chatPoll(false);
+    });
+  });
+
+  /* ---- watchtower cams (view only; transmitting needs the field client) ---- */
+  var camTimer = null;
+
+  function camPoll() {
+    api("/api/cam/list").then(function (res) {
+      if (!res.ok) return;
+      var feeds = res.json.feeds || [];
+      var grid = $("cam-grid");
+      $("cam-empty").classList.toggle("hidden", feeds.length > 0);
+      var seen = {};
+      feeds.forEach(function (f) {
+        seen[f.id] = true;
+        var cell = document.getElementById("cam-" + f.id);
+        var src = "/api/cam/frame?feed=" + encodeURIComponent(f.id) +
+          "&token=" + encodeURIComponent(token) + "&t=" + Date.now();
+        if (!cell) {
+          cell = document.createElement("div");
+          cell.className = "cam-cell";
+          cell.id = "cam-" + f.id;
+          cell.innerHTML = '<img alt=""><div class="cap"></div>';
+          grid.appendChild(cell);
+        }
+        cell.querySelector("img").src = src;
+        cell.querySelector(".cap").textContent = "FEED :: " + (f.name || f.id).toUpperCase();
+      });
+      Array.prototype.forEach.call(grid.children, function (cell) {
+        if (!seen[cell.id.slice(4)]) cell.remove();
+      });
+    });
+  }
+
+  function startCams() { camPoll(); camTimer = setInterval(camPoll, 1600); }
+  function stopCams() { clearInterval(camTimer); camTimer = null; }
 
   function begin() {
     fetch("/api/host-info").then(function (r) { return r.json(); }).then(function (info) {

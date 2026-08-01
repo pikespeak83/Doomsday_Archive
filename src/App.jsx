@@ -533,7 +533,7 @@ export default function App() {
                 />
               )}
               {win.appId === "livefeed" && <LiveFeedApp lanState={lanState} />}
-              {win.appId === "comms" && <CommsApp notify={pushToast} onOpenApp={openApp} />}
+              {win.appId === "comms" && <CommsApp notify={pushToast} onOpenApp={openApp} lanState={lanState} />}
               {win.appId === "personnel" && <PersonnelApp notify={pushToast} />}
               {win.appId === "missions" && <MissionsApp notify={pushToast} />}
               {win.appId === "research" && <ResearchApp notify={pushToast} onOpenMedia={openMedia} />}
