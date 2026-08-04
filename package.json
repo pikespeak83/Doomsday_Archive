@@ -14,9 +14,9 @@
     "build:web": "vite build",
     "icons": "node scripts/build-app-icon.js",
     "start": "electron .",
-    "dist:host": "npm run icons && npm run build:web && electron-builder --linux",
-    "dist:client": "npm run icons && npm run build:web && electron-builder --linux --config electron-builder.client.json",
-    "dist": "npm run icons && npm run build:web && electron-builder --linux && electron-builder --linux --config electron-builder.client.json"
+    "dist:host": "npm run icons && npm run build:web && electron-builder --linux --publish never",
+    "dist:client": "npm run icons && npm run build:web && electron-builder --linux --config electron-builder.client.json --publish never",
+    "dist": "npm run icons && npm run build:web && electron-builder --linux --publish never && electron-builder --linux --config electron-builder.client.json --publish never"
   },
   "dependencies": {
     "express": "^4.21.2",
