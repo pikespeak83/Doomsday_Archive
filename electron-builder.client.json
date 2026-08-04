@@ -27,6 +27,7 @@
     "target": ["AppImage", "deb", "tar.gz"],
     "icon": "assets/app-icon.png",
     "category": "Utility",
+    "maintainer": "pikespeak83 <pikespeak83@users.noreply.github.com>",
     "synopsis": "Offline LAN field terminal",
     "syncDesktopName": true,
     "desktop": {

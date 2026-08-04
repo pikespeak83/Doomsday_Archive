@@ -66,6 +66,7 @@
       ],
       "icon": "assets/app-icon.png",
       "category": "Utility",
+      "maintainer": "pikespeak83 <pikespeak83@users.noreply.github.com>",
       "synopsis": "Offline LAN-only archive terminal",
       "syncDesktopName": true,
       "desktop": {
