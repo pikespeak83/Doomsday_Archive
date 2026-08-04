@@ -5,17 +5,18 @@
   "author": "pikespeak83",
   "license": "MIT",
   "productName": "Doomsday Archive",
+  "desktopName": "doomsday-archive.desktop",
   "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on tcp:5178 && electron .\"",
     "dev:client": "concurrently \"vite\" \"wait-on tcp:5178 && electron electron/clientMain.js\"",
     "dev:both": "concurrently \"vite\" \"wait-on tcp:5178 && electron .\" \"wait-on tcp:5178 && electron electron/clientMain.js\"",
     "build:web": "vite build",
-    "icons:win": "node scripts/build-app-icon.js && node scripts/build-win-icon.js",
+    "icons": "node scripts/build-app-icon.js",
     "start": "electron .",
-    "dist:host": "npm run icons:win && npm run build:web && electron-builder --win nsis",
-    "dist:client": "npm run icons:win && npm run build:web && electron-builder --win nsis --config electron-builder.client.json",
-    "dist": "npm run icons:win && npm run build:web && electron-builder --win nsis && electron-builder --win nsis --config electron-builder.client.json"
+    "dist:host": "npm run icons && npm run build:web && electron-builder --linux",
+    "dist:client": "npm run icons && npm run build:web && electron-builder --linux --config electron-builder.client.json",
+    "dist": "npm run icons && npm run build:web && electron-builder --linux && electron-builder --linux --config electron-builder.client.json"
   },
   "dependencies": {
     "express": "^4.21.2",
@@ -39,8 +40,6 @@
   "build": {
     "appId": "com.pikespeak83.doomsdayarchive",
     "productName": "Doomsday Archive",
-    "electronDist": "node_modules/electron/dist",
-    "afterPack": "./scripts/after-pack-rcedit.js",
     "asar": true,
     "compression": "maximum",
     "files": [
@@ -52,35 +51,30 @@
     ],
     "extraResources": [
       {
-        "from": "assets/app-icon.ico",
-        "to": "app-icon.ico"
+        "from": "assets/app-icon.png",
+        "to": "app-icon.png"
       }
     ],
     "directories": {
       "output": "release"
     },
-    "win": {
+    "linux": {
       "target": [
-        "nsis"
+        "AppImage",
+        "deb",
+        "tar.gz"
       ],
-      "icon": "assets/app-icon.ico",
-      "verifyUpdateCodeSignature": false,
-      "signAndEditExecutable": false,
-      "artifactName": "Doomsday-Archive-Setup-${version}.${ext}"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "warningsAsErrors": false,
-      "license": "license-agreement.html",
-      "installerIcon": "assets/app-icon.ico",
-      "uninstallerIcon": "assets/app-icon.ico",
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Doomsday Archive",
-      "runAfterFinish": true,
-      "uninstallDisplayName": "${productName} ${version}",
-      "displayLanguageSelector": false,
+      "icon": "assets/app-icon.png",
+      "category": "Utility",
+      "synopsis": "Offline LAN-only archive terminal",
+      "syncDesktopName": true,
+      "desktop": {
+        "entry": {
+          "Name": "Doomsday Archive",
+          "Comment": "Offline household archive host node",
+          "Categories": "Utility;FileTools;Network;"
+        }
+      },
       "artifactName": "Doomsday-Archive-Setup-${version}.${ext}"
     }
   }

@@ -1,10 +1,9 @@
 {
   "appId": "com.pikespeak83.doomsdayfield",
   "productName": "Doomsday Field Terminal",
-  "electronDist": "node_modules/electron/dist",
-  "afterPack": "./scripts/after-pack-rcedit.js",
   "extraMetadata": {
-    "main": "electron/clientMain.js"
+    "main": "electron/clientMain.js",
+    "desktopName": "doomsday-field-terminal.desktop"
   },
   "asar": true,
   "compression": "maximum",
@@ -17,33 +16,26 @@
   ],
   "extraResources": [
     {
-      "from": "assets/app-icon.ico",
-      "to": "app-icon.ico"
+      "from": "assets/app-icon.png",
+      "to": "app-icon.png"
     }
   ],
   "directories": {
     "output": "release"
   },
-  "win": {
-    "target": ["nsis"],
-    "icon": "assets/app-icon.ico",
-    "verifyUpdateCodeSignature": false,
-    "signAndEditExecutable": false,
-    "artifactName": "Doomsday-Field-Terminal-Setup-${version}.${ext}"
-  },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true,
-    "warningsAsErrors": false,
-    "license": "license-agreement.html",
-    "installerIcon": "assets/app-icon.ico",
-    "uninstallerIcon": "assets/app-icon.ico",
-    "createDesktopShortcut": true,
-    "createStartMenuShortcut": true,
-    "shortcutName": "Doomsday Field Terminal",
-    "runAfterFinish": true,
-    "uninstallDisplayName": "${productName} ${version}",
-    "displayLanguageSelector": false,
+  "linux": {
+    "target": ["AppImage", "deb", "tar.gz"],
+    "icon": "assets/app-icon.png",
+    "category": "Utility",
+    "synopsis": "Offline LAN field terminal",
+    "syncDesktopName": true,
+    "desktop": {
+      "entry": {
+        "Name": "Doomsday Field Terminal",
+        "Comment": "Field device client for the Doomsday Archive",
+        "Categories": "Utility;FileTools;Network;"
+      }
+    },
     "artifactName": "Doomsday-Field-Terminal-Setup-${version}.${ext}"
   }
 }

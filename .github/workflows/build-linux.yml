@@ -1,0 +1,50 @@
+name: Build Linux
+
+# Linux packages cannot be produced on the Windows dev box: AppImage needs
+# symlinks and tar.gz loses the exec bits. Ubuntu runners do it properly.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the artifacts to (blank = artifacts only)"
+        required: false
+        default: ""
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build host node and field terminal
+        run: npm run dist
+
+      - name: Collect artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.tar.gz
+
+      - name: Attach to release
+        if: ${{ github.event.release.tag_name != '' || inputs.tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          gh release upload "$TAG" release/*.AppImage release/*.deb release/*.tar.gz --clobber

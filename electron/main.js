@@ -142,7 +142,7 @@ function createMainWindow() {
     frame: false,
     show: false,
     backgroundColor: "#020703",
-    icon: path.join(__dirname, "..", "assets", "app-icon.ico"),
+    icon: path.join(__dirname, "..", "assets", "app-icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -198,7 +198,7 @@ function createMainWindow() {
 function createTray() {
   if (tray) return;
   try {
-    tray = new Tray(path.join(__dirname, "..", "assets", "app-icon.ico"));
+    tray = new Tray(path.join(__dirname, "..", "assets", "app-icon.png"));
     tray.setToolTip("Doomsday Archive");
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: "Open Archive Terminal", click: () => wakeWindow() },

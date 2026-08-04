@@ -88,6 +88,42 @@ function createUpdater({ assetPrefix, currentVersion, onEvent }) {
     return false;
   }
 
+  /** Windows ships setup exes, Linux ships AppImages. */
+  function assetExt() {
+    return process.platform === "linux" ? ".AppImage" : ".exe";
+  }
+
+  /**
+   * Windows hands off to the setup exe. On Linux the AppImage is the app, so
+   * the new file is renamed over the running one (the kernel keeps the old
+   * inode alive until exit) and the node relaunches from it.
+   */
+  function installAndRestart(destPath) {
+    if (process.platform !== "linux") {
+      const child = spawn(destPath, [], { detached: true, stdio: "ignore" });
+      child.unref();
+      setTimeout(() => app.quit(), 400);
+      return;
+    }
+    fs.chmodSync(destPath, 0o755);
+    const current = process.env.APPIMAGE;
+    if (current) {
+      fs.renameSync(destPath, current);
+      app.relaunch({ execPath: current });
+      setTimeout(() => app.quit(), 400);
+      return;
+    }
+    // not running from an AppImage (unpacked or deb install): leave the file
+    dialog.showMessageBox({
+      type: "info",
+      title: "TRANSFER COMPLETE",
+      message: "UPDATE RETRIEVED.",
+      detail: `The new node image is at ${destPath}. This install was not launched from an AppImage, so swap it in by hand.`,
+      buttons: ["ACKNOWLEDGED"],
+      noLink: true
+    });
+  }
+
   async function runCheck(parentWindow, manual) {
     if (busy) return { status: "busy" };
     if (!app.isPackaged && !manual) return { status: "dev" };
@@ -106,7 +142,7 @@ function createUpdater({ assetPrefix, currentVersion, onEvent }) {
       if (!app.isPackaged) return { status: "dev", remoteVersion };
 
       const asset = (release.assets || []).find(
-        (a) => a.name?.startsWith(assetPrefix) && a.name.endsWith(".exe")
+        (a) => a.name?.startsWith(assetPrefix) && a.name.endsWith(assetExt())
       );
       if (!asset?.browser_download_url) return { status: "current", remoteVersion };
 
@@ -131,9 +167,7 @@ function createUpdater({ assetPrefix, currentVersion, onEvent }) {
       await download(asset.browser_download_url, destPath);
 
       emit("update-ready", { version: remoteVersion });
-      const child = spawn(destPath, [], { detached: true, stdio: "ignore" });
-      child.unref();
-      setTimeout(() => app.quit(), 400);
+      installAndRestart(destPath);
       return { status: "installing", remoteVersion };
     } catch {
       return { status: "offline" };

@@ -41,15 +41,18 @@ npm run dev:client   # field terminal
 npm run dev:both     # both at once (great for testing approval flow)
 ```
 
-## Build the Windows installers
+## Build the Linux packages
 
 ```bash
-npm run dist         # both installers
-npm run dist:host    # Doomsday-Archive-Setup-x.y.z.exe
-npm run dist:client  # Doomsday-Field-Terminal-Setup-x.y.z.exe
+npm run dist         # both apps
+npm run dist:host    # Doomsday-Archive-Setup-x.y.z.AppImage / .deb / .tar.gz
+npm run dist:client  # Doomsday-Field-Terminal-Setup-x.y.z.AppImage / .deb / .tar.gz
 ```
 
-Output lands in `release/`.
+Output lands in `release/`. Packaging must run on Linux: AppImage needs
+symlinks and tar.gz needs exec bits, neither of which survive a Windows host.
+The Build Linux workflow does it on an Ubuntu runner and attaches the packages
+to a published release.
 
 ## Connecting without wifi
 

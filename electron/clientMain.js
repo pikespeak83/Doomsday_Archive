@@ -59,7 +59,7 @@ function createMainWindow() {
     frame: false,
     show: false,
     backgroundColor: "#020703",
-    icon: path.join(__dirname, "..", "assets", "app-icon.ico"),
+    icon: path.join(__dirname, "..", "assets", "app-icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "clientPreload.js"),
       contextIsolation: true,

@@ -1,4 +1,6 @@
-# Creates a GitHub release for the current version and uploads both setup EXEs.
+# Creates a GitHub release for the current version and uploads the Linux
+# packages plus the broadcast pack. The packages themselves are built by the
+# Build Linux workflow (Ubuntu runner); this script only publishes.
 # Uses the token already stored in Git Credential Manager; the token is kept
 # in-process and never printed.
 $ErrorActionPreference = "Stop"
@@ -20,7 +22,7 @@ try {
     tag_name = $tag
     target_commitish = "main"
     name = "Doomsday Archive $tag"
-    body = "Offline household archive. Two installers: **Doomsday-Archive-Setup** (host node) and **Doomsday-Field-Terminal-Setup** (field devices). **Broadcast-Pack.zip** is the retro TV channel archive: the host retrieves it once from inside the app (BROADCAST > RETRIEVE) and then serves it to every field terminal over the LAN. Installed apps auto-check this page on launch when the grid is up."
+    body = "Offline household archive for Linux. Two apps: **Doomsday-Archive-Setup** (host node) and **Doomsday-Field-Terminal-Setup** (field devices), each as an AppImage (chmod +x and run) or a .deb. **Broadcast-Pack.zip** is the retro TV channel archive: the host retrieves it once from inside the app (BROADCAST > RETRIEVE) and then serves it to every field terminal over the LAN. Installed apps auto-check this page on launch when the grid is up."
   } | ConvertTo-Json)
   Write-Host "RELEASE CREATED: $($release.html_url)"
 } catch {
@@ -31,8 +33,14 @@ try {
   } else { throw }
 }
 
-# upload assets (replace if already present)
-$assets = @("Doomsday-Archive-Setup-$version.exe", "Doomsday-Field-Terminal-Setup-$version.exe", "Broadcast-Pack.zip")
+# upload assets (replace if already present, skip whatever this run did not build)
+$assets = @(
+  "Doomsday-Archive-Setup-$version.AppImage",
+  "Doomsday-Field-Terminal-Setup-$version.AppImage",
+  "Doomsday-Archive-Setup-$version.deb",
+  "Doomsday-Field-Terminal-Setup-$version.deb",
+  "Broadcast-Pack.zip"
+)
 foreach ($name in $assets) {
   $file = Join-Path "$root\release" $name
   if (-not (Test-Path $file)) { Write-Host "MISSING: $name"; continue }
